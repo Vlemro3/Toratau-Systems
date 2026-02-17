@@ -1,0 +1,25 @@
+# Зависимости
+node_modules/
+
+# Сборка
+dist/
+
+# Переменные окружения (локальные)
+.env
+.env.local
+.env.*.local
+
+# Логи
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ОС
+.DS_Store
+Thumbs.db
