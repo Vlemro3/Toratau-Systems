@@ -51,8 +51,9 @@ class ApiClient {
     if (response.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      // Redirect to login - don't throw error as redirect handles it
       window.location.href = '/login';
-      throw new Error('Сессия истекла');
+      return Promise.reject(new Error('Сессия истекла'));
     }
 
     if (!response.ok) {

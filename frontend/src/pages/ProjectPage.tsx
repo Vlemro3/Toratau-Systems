@@ -1,7 +1,7 @@
 /**
  * Карточка объекта — активная секция определяется из URL (сайдбар управляет).
  */
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
 import { getProject } from '../api/projects';
 import { getProjectReport } from '../api/reports';
@@ -24,21 +24,26 @@ import {
 } from '../utils/constants';
 import type { Project, ProjectReport, WorkLog, CashIn, Expense, Payout, ExpenseCategory } from '../types';
 
-type Section = 'summary' | 'works' | 'payouts' | 'payments' | 'expenses' | 'crews';
+type Section = 'summary' | 'works' | 'expenses-payouts' | 'payments';
 
 function sectionFromPath(pathname: string): Section {
   const parts = pathname.split('/');
   const last = parts[3] || '';
   const map: Record<string, Section> = {
-    '': 'summary', works: 'works', payouts: 'payouts',
-    payments: 'payments', expenses: 'expenses', crews: 'crews',
+    '': 'summary', works: 'works',
+    'expenses-payouts': 'expenses-payouts',
+    payments: 'payments',
+    // Поддержка старых маршрутов для обратной совместимости
+    payouts: 'expenses-payouts',
+    expenses: 'expenses-payouts',
   };
   return map[last] || 'summary';
 }
 
 const SECTION_TITLES: Record<Section, string> = {
-  summary: 'Сводка', works: 'Работы', payouts: 'Выплаты',
-  payments: 'Платежи', expenses: 'Расходы', crews: 'Бригады',
+  summary: 'Сводка', works: 'Работы',
+  'expenses-payouts': 'Расходы и выплаты',
+  payments: 'Платежи',
 };
 
 const IconEdit = () => (
@@ -55,10 +60,15 @@ const IconDelete = () => (
 
 export function ProjectPage() {
   const { id } = useParams<{ id: string }>();
-  const projectId = Number(id);
+  const projectId = id ? Number(id) : NaN;
   const location = useLocation();
   const { isAdmin } = useAuth();
   const section = sectionFromPath(location.pathname);
+
+  // Validate project ID
+  if (!id || isNaN(projectId)) {
+    return <EmptyState message="Неверный ID объекта" />;
+  }
 
   const [project, setProject] = useState<Project | null>(null);
   const [report, setReport] = useState<ProjectReport | null>(null);
@@ -100,7 +110,14 @@ export function ProjectPage() {
     setConfirmAction({
       title,
       message: `Удалить выбранные записи (${ids.length})?`,
-      action: async () => { for (const i of ids) await deleteFn(i); await loadAll(); },
+      action: async () => {
+        const results = await Promise.allSettled(ids.map((i) => deleteFn(i)));
+        const failures = results.filter((r) => r.status === 'rejected');
+        if (failures.length > 0) {
+          alert(`Не удалось удалить ${failures.length} из ${ids.length} записей`);
+        }
+        await loadAll();
+      },
     });
   };
 
@@ -136,10 +153,8 @@ export function ProjectPage() {
           : <EmptyState message="Данные загружаются..." icon="📊" />
       )}
       {section === 'works' && <WorksSection projectId={projectId} workLogs={workLogs} isAdmin={isAdmin} onDelete={askDelete} onDeleteMany={(ids) => askDeleteMany('Удалить работы?', ids, deleteWorkLog)} />}
-      {section === 'payouts' && <PayoutsSection projectId={projectId} payouts={payouts} isAdmin={isAdmin} onDelete={askDelete} onDeleteMany={(ids) => askDeleteMany('Удалить выплаты?', ids, deletePayout)} />}
+      {section === 'expenses-payouts' && <ExpensesAndPayoutsSection projectId={projectId} expenses={expenses} payouts={payouts} isAdmin={isAdmin} onDelete={askDelete} onDeleteMany={askDeleteMany} />}
       {section === 'payments' && <PaymentsSection projectId={projectId} cashIns={cashIns} isAdmin={isAdmin} onDelete={askDelete} onDeleteMany={(ids) => askDeleteMany('Удалить платежи?', ids, deleteCashIn)} />}
-      {section === 'expenses' && <ExpensesSection projectId={projectId} expenses={expenses} isAdmin={isAdmin} onDelete={askDelete} onDeleteMany={(ids) => askDeleteMany('Удалить расходы?', ids, deleteExpense)} />}
-      {section === 'crews' && (report ? <CrewsTable report={report} /> : <EmptyState message="Данные загружаются..." icon="👷" />)}
 
       <ConfirmDialog
         open={!!confirmAction} title={confirmAction?.title || ''} message={confirmAction?.message || ''}
@@ -156,19 +171,28 @@ interface SummaryProps {
   workLogs: WorkLog[]; cashIns: CashIn[]; expenses: Expense[]; payouts: Payout[];
 }
 
+// Constants
+const MS_PER_DAY = 86400000;
+
 function SummaryDashboard({ project, report, workLogs, cashIns, expenses, payouts }: SummaryProps) {
-  const now = new Date();
-  const daysLeft = project.end_date ? Math.ceil((new Date(project.end_date).getTime() - now.getTime()) / 86400000) : null;
-  const daysPassed = Math.ceil((now.getTime() - new Date(project.start_date).getTime()) / 86400000);
+  const now = useMemo(() => new Date(), []);
+  const daysLeft = useMemo(() => {
+    return project.end_date ? Math.ceil((new Date(project.end_date).getTime() - now.getTime()) / MS_PER_DAY) : null;
+  }, [project.end_date, now]);
+  const daysPassed = useMemo(() => {
+    return Math.ceil((now.getTime() - new Date(project.start_date).getTime()) / MS_PER_DAY);
+  }, [project.start_date, now]);
 
-  const allDates: { date: string; label: string; who?: string }[] = [];
-  workLogs.forEach((wl) => allDates.push({ date: wl.date, label: 'Работа: ' + (wl.work_type?.name || ''), who: wl.creator?.full_name }));
-  cashIns.forEach((ci) => allDates.push({ date: ci.date, label: 'Платёж: ' + formatMoney(ci.amount), who: ci.creator?.full_name }));
-  expenses.forEach((e) => allDates.push({ date: e.date, label: 'Расход: ' + formatMoney(e.amount), who: e.creator?.full_name }));
-  payouts.forEach((p) => allDates.push({ date: p.date, label: 'Выплата: ' + formatMoney(p.amount), who: p.creator?.full_name }));
-  allDates.sort((a, b) => b.date.localeCompare(a.date));
+  const allDates = useMemo(() => {
+    const dates: { date: string; label: string; who?: string }[] = [];
+    workLogs.forEach((wl) => dates.push({ date: wl.date, label: 'Работа: ' + (wl.work_type?.name || ''), who: wl.creator?.full_name }));
+    cashIns.forEach((ci) => dates.push({ date: ci.date, label: 'Платёж: ' + formatMoney(ci.amount), who: ci.creator?.full_name }));
+    expenses.forEach((e) => dates.push({ date: e.date, label: 'Расход: ' + formatMoney(e.amount), who: e.creator?.full_name }));
+    payouts.forEach((p) => dates.push({ date: p.date, label: 'Выплата: ' + formatMoney(p.amount), who: p.creator?.full_name }));
+    return dates.sort((a, b) => b.date.localeCompare(a.date));
+  }, [workLogs, cashIns, expenses, payouts]);
 
-  const weekAgo = new Date(now.getTime() - 7 * 86400000).toISOString().slice(0, 10);
+  const weekAgo = useMemo(() => new Date(now.getTime() - 7 * MS_PER_DAY).toISOString().slice(0, 10), [now]);
   const weekPayouts = payouts.filter((p) => p.date >= weekAgo);
   const weekPayoutsSum = weekPayouts.reduce((s, p) => s + p.amount, 0);
   const weekWorks = workLogs.filter((wl) => wl.date >= weekAgo);
@@ -182,15 +206,15 @@ function SummaryDashboard({ project, report, workLogs, cashIns, expenses, payout
   const expTotal = expenses.reduce((s, e) => s + e.amount, 0);
 
   const crewShare = report.total_fact_expense > 0 ? (report.total_paid / report.total_fact_expense) * 100 : 0;
-  const otherShare = 100 - crewShare;
+  const otherShare = report.total_fact_expense > 0 ? (report.total_expenses / report.total_fact_expense) * 100 : 0;
 
   return (
     <div className="dashboard">
       <div className="dash-kpis">
         <KpiCard icon="📅" value={daysLeft !== null ? (daysLeft > 0 ? String(daysLeft) : daysLeft === 0 ? 'Сегодня' : `${Math.abs(daysLeft)} просрочка`) : '—'} label={daysLeft !== null && daysLeft < 0 ? 'Дней просрочки' : 'Дней до сдачи'} alert={daysLeft !== null && daysLeft < 0} />
         <KpiCard icon="⏱️" value={String(daysPassed)} label="Дней в работе" />
-        <KpiCard icon="💸" value={`${weekPayouts.length} / ${formatMoney(weekPayoutsSum)}`} label="Выплат за неделю" />
-        <KpiCard icon="🔨" value={`${weekWorks.length} / ${formatMoney(weekWorksSum)}`} label="Работ за неделю" />
+        <KpiCard icon="💸" value={formatMoney(weekPayoutsSum)} label="Выплат за неделю" />
+        <KpiCard icon="🔨" value={formatMoney(weekWorksSum)} label="Работ за неделю" />
       </div>
       <div className="dash-cols">
         <div className="dash-card"><h3 className="dash-card__title">Финансы</h3><FinanceRows project={project} report={report} /></div>
@@ -216,13 +240,9 @@ function SummaryDashboard({ project, report, workLogs, cashIns, expenses, payout
       </div>
       <div className="dash-cols">
         {report.crews_summary.length > 0 && (
-          <div className="dash-card"><h3 className="dash-card__title">Задолженность бригадам</h3>
-            <div className="dash-bar-chart">
-              {report.crews_summary.map((cs) => {
-                const maxDebt = Math.max(...report.crews_summary.map((c) => Math.abs(c.debt)), 1);
-                return <BarRow key={cs.crew.id} label={cs.crew.name} value={formatMoney(cs.debt)} pct={(Math.abs(cs.debt) / maxDebt) * 100} color={cs.debt > 0 ? '#ef4444' : '#22c55e'} valueCls={cs.debt > 0 ? 'text-danger' : 'text-success'} />;
-              })}
-            </div>
+          <div className="dash-card">
+            <h3 className="dash-card__title">Подрядчики</h3>
+            <CrewsTable report={report} />
           </div>
         )}
         <div className="dash-card"><h3 className="dash-card__title">Последняя активность</h3>
@@ -263,8 +283,6 @@ function FinanceRows({ project, report }: { project: Project; report: ProjectRep
     { d: true },
     { label: 'Итого факт расход', value: formatMoney(report.total_fact_expense), cls: 'text-danger', bold: true },
     { label: 'Баланс (касса)', value: formatMoney(report.balance), cls: report.balance >= 0 ? 'text-success' : 'text-danger', bold: true },
-    { label: 'Прогноз прибыли', value: formatMoney(report.forecast_profit), cls: report.forecast_profit >= 0 ? 'text-success' : 'text-danger', bold: true },
-    { label: 'Отклонение от плана', value: formatMoney(report.plan_deviation), cls: report.plan_deviation > 0 ? 'text-danger' : 'text-success' },
     { d: true },
     { label: 'Дата старта', value: formatDate(project.start_date) },
     ...(project.end_date ? [{ label: 'Плановое завершение', value: formatDate(project.end_date) }] : []),
@@ -284,15 +302,20 @@ function WorksSection({ projectId, workLogs, isAdmin, onDelete, onDeleteMany }: 
       <div className="tab-header"><Link to={`/projects/${projectId}/work-logs/new`} className="btn btn--primary btn--sm">+ Добавить работу</Link></div>
       <DataTable
         items={workLogs}
+        columns={[
+          { key: 'date', label: 'Дата', sortValue: (wl) => wl.date },
+          { key: 'type', label: 'Вид работ', sortValue: (wl) => wl.work_type?.name || '' },
+          { key: 'crew', label: 'Бригада', sortValue: (wl) => wl.crew?.name || '' },
+          { key: 'volume', label: 'Объём', className: 'text-right', sortValue: (wl) => wl.volume },
+          { key: 'amount', label: 'Сумма', className: 'text-right', sortValue: (wl) => wl.accrued_amount },
+          { key: 'comment', label: 'Комментарий' },
+          isAdmin && { key: 'actions', label: 'Действия', className: 'text-center' },
+        ]}
+        defaultSortKey="date"
         searchFields={(wl) => `${wl.work_type?.name || ''} ${wl.crew?.name || ''} ${wl.comment || ''} ${wl.date}`}
         emptyMessage="Нет записей о работах" emptyIcon="🔨"
         showCheckboxes={isAdmin}
         onDeleteMany={isAdmin ? onDeleteMany : undefined}
-        renderHead={() => <>
-          <th>Дата</th><th>Вид работ</th><th>Бригада</th>
-          <th className="text-right">Объём</th><th className="text-right">Сумма</th>
-          <th>Комментарий</th>{isAdmin && <th className="text-center">Действия</th>}
-        </>}
         renderRow={(wl, sel, toggle) => (
           <tr key={wl.id} className={sel ? 'table-row--selected' : ''}>
             {isAdmin && <td style={{ textAlign: 'center' }}><input type="checkbox" checked={sel} onChange={toggle} /></td>}
@@ -313,40 +336,6 @@ function WorksSection({ projectId, workLogs, isAdmin, onDelete, onDeleteMany }: 
   );
 }
 
-function PayoutsSection({ projectId, payouts, isAdmin, onDelete, onDeleteMany }: {
-  projectId: number; payouts: Payout[]; isAdmin: boolean; onDelete: DeleteFn; onDeleteMany: (ids: number[]) => void;
-}) {
-  return (
-    <div>
-      <div className="tab-header"><Link to={`/projects/${projectId}/payouts/new`} className="btn btn--primary btn--sm">+ Создать выплату</Link></div>
-      <DataTable
-        items={payouts}
-        searchFields={(p) => `${p.crew?.name || ''} ${p.comment || ''} ${p.date} ${p.amount}`}
-        emptyMessage="Нет выплат" emptyIcon="💸"
-        showCheckboxes={isAdmin}
-        onDeleteMany={isAdmin ? onDeleteMany : undefined}
-        renderHead={() => <>
-          <th>Дата</th><th>Бригада</th><th className="text-right">Сумма</th><th>Способ</th><th>Комментарий</th>{isAdmin && <th className="text-center">Действия</th>}
-        </>}
-        renderRow={(p, sel, toggle) => (
-          <tr key={p.id} className={sel ? 'table-row--selected' : ''}>
-            {isAdmin && <td style={{ textAlign: 'center' }}><input type="checkbox" checked={sel} onChange={toggle} /></td>}
-            <td style={{ whiteSpace: 'nowrap' }}>{formatDate(p.date)}</td>
-            <td><strong>{p.crew?.name || `#${p.crew_id}`}</strong></td>
-            <td className="text-right text-bold">{formatMoney(p.amount)}</td>
-            <td>{PAYMENT_METHOD_LABELS[p.payment_method]}</td>
-            <td className="text-muted">{p.comment || '—'}</td>
-            {isAdmin && <td><div className="table-actions">
-              <Link to={`/projects/${projectId}/payouts/${p.id}/edit`} className="table-action table-action--edit" title="Редактировать"><IconEdit /></Link>
-              <button className="table-action table-action--delete" onClick={() => onDelete('Удалить выплату?', `${p.crew?.name} — ${formatMoney(p.amount)}`, () => deletePayout(p.id))} title="Удалить"><IconDelete /></button>
-            </div></td>}
-          </tr>
-        )}
-      />
-    </div>
-  );
-}
-
 function PaymentsSection({ projectId, cashIns, isAdmin, onDelete, onDeleteMany }: {
   projectId: number; cashIns: CashIn[]; isAdmin: boolean; onDelete: DeleteFn; onDeleteMany: (ids: number[]) => void;
 }) {
@@ -355,13 +344,17 @@ function PaymentsSection({ projectId, cashIns, isAdmin, onDelete, onDeleteMany }
       <div className="tab-header"><Link to={`/projects/${projectId}/cashin/new`} className="btn btn--primary btn--sm">+ Добавить платёж</Link></div>
       <DataTable
         items={cashIns}
+        columns={[
+          { key: 'date', label: 'Дата', sortValue: (ci) => ci.date },
+          { key: 'amount', label: 'Сумма', className: 'text-right', sortValue: (ci) => ci.amount },
+          { key: 'comment', label: 'Комментарий' },
+          isAdmin && { key: 'actions', label: 'Действия', className: 'text-center' },
+        ]}
+        defaultSortKey="date"
         searchFields={(ci) => `${ci.comment || ''} ${ci.date} ${ci.amount}`}
         emptyMessage="Нет входящих платежей" emptyIcon="💰"
         showCheckboxes={isAdmin}
         onDeleteMany={isAdmin ? onDeleteMany : undefined}
-        renderHead={() => <>
-          <th>Дата</th><th className="text-right">Сумма</th><th>Комментарий</th>{isAdmin && <th className="text-center">Действия</th>}
-        </>}
         renderRow={(ci, sel, toggle) => (
           <tr key={ci.id} className={sel ? 'table-row--selected' : ''}>
             {isAdmin && <td style={{ textAlign: 'center' }}><input type="checkbox" checked={sel} onChange={toggle} /></td>}
@@ -379,52 +372,116 @@ function PaymentsSection({ projectId, cashIns, isAdmin, onDelete, onDeleteMany }
   );
 }
 
-function ExpensesSection({ projectId, expenses, isAdmin, onDelete, onDeleteMany }: {
-  projectId: number; expenses: Expense[]; isAdmin: boolean; onDelete: DeleteFn; onDeleteMany: (ids: number[]) => void;
+function ExpensesAndPayoutsSection({ projectId, expenses, payouts, isAdmin, onDelete, onDeleteMany }: {
+  projectId: number; expenses: Expense[]; payouts: Payout[]; isAdmin: boolean; onDelete: DeleteFn; onDeleteMany: (title: string, ids: number[], deleteFn: (id: number) => Promise<void>) => void;
 }) {
   return (
     <div>
-      <div className="tab-header"><Link to={`/projects/${projectId}/expenses/new`} className="btn btn--primary btn--sm">+ Добавить расход</Link></div>
-      <DataTable
-        items={expenses}
-        searchFields={(e) => `${EXPENSE_CATEGORY_LABELS[e.category as ExpenseCategory] || e.category} ${e.comment || ''} ${e.date} ${e.amount}`}
-        emptyMessage="Нет расходов" emptyIcon="🧾"
-        showCheckboxes={isAdmin}
-        onDeleteMany={isAdmin ? onDeleteMany : undefined}
-        renderHead={() => <>
-          <th>Дата</th><th>Категория</th><th className="text-right">Сумма</th><th>Комментарий</th>{isAdmin && <th className="text-center">Действия</th>}
-        </>}
-        renderRow={(exp, sel, toggle) => (
-          <tr key={exp.id} className={sel ? 'table-row--selected' : ''}>
-            {isAdmin && <td style={{ textAlign: 'center' }}><input type="checkbox" checked={sel} onChange={toggle} /></td>}
-            <td style={{ whiteSpace: 'nowrap' }}>{formatDate(exp.date)}</td>
-            <td>{EXPENSE_CATEGORY_LABELS[exp.category as ExpenseCategory] || exp.category}</td>
-            <td className="text-right text-bold">{formatMoney(exp.amount)}</td>
-            <td className="text-muted">{exp.comment || '—'}</td>
-            {isAdmin && <td><div className="table-actions">
-              <Link to={`/projects/${projectId}/expenses/${exp.id}/edit`} className="table-action table-action--edit" title="Редактировать"><IconEdit /></Link>
-              <button className="table-action table-action--delete" onClick={() => onDelete('Удалить расход?', `${formatMoney(exp.amount)}`, () => deleteExpense(exp.id))} title="Удалить"><IconDelete /></button>
-            </div></td>}
-          </tr>
-        )}
-      />
+      <div className="tab-header">
+        <Link to={`/projects/${projectId}/expenses/new`} className="btn btn--primary btn--sm">+ Добавить расход</Link>
+        <Link to={`/projects/${projectId}/payouts/new`} className="btn btn--primary btn--sm" style={{ marginLeft: '8px' }}>+ Создать выплату</Link>
+      </div>
+
+      {/* Расходы */}
+      <div style={{ marginBottom: '32px' }}>
+        <h3 style={{ marginBottom: '16px', fontSize: '1.1rem', fontWeight: 600 }}>Расходы</h3>
+        <DataTable
+          items={expenses}
+          columns={[
+            { key: 'date', label: 'Дата', sortValue: (e) => e.date },
+            { key: 'category', label: 'Категория', sortValue: (e) => EXPENSE_CATEGORY_LABELS[e.category as ExpenseCategory] || e.category },
+            { key: 'amount', label: 'Сумма', className: 'text-right', sortValue: (e) => e.amount },
+            { key: 'comment', label: 'Комментарий' },
+            isAdmin && { key: 'actions', label: 'Действия', className: 'text-center' },
+          ]}
+          defaultSortKey="date"
+          searchFields={(e) => `${EXPENSE_CATEGORY_LABELS[e.category as ExpenseCategory] || e.category} ${e.comment || ''} ${e.date} ${e.amount}`}
+          emptyMessage="Нет расходов" emptyIcon="🧾"
+          showCheckboxes={isAdmin}
+          onDeleteMany={isAdmin ? (ids) => onDeleteMany('Удалить расходы?', ids, deleteExpense) : undefined}
+          renderRow={(exp, sel, toggle) => (
+            <tr key={exp.id} className={sel ? 'table-row--selected' : ''}>
+              {isAdmin && <td style={{ textAlign: 'center' }}><input type="checkbox" checked={sel} onChange={toggle} /></td>}
+              <td style={{ whiteSpace: 'nowrap' }}>{formatDate(exp.date)}</td>
+              <td>{EXPENSE_CATEGORY_LABELS[exp.category as ExpenseCategory] || exp.category}</td>
+              <td className="text-right text-bold">{formatMoney(exp.amount)}</td>
+              <td className="text-muted">{exp.comment || '—'}</td>
+              {isAdmin && <td><div className="table-actions">
+                <Link to={`/projects/${projectId}/expenses/${exp.id}/edit`} className="table-action table-action--edit" title="Редактировать"><IconEdit /></Link>
+                <button className="table-action table-action--delete" onClick={() => onDelete('Удалить расход?', `${formatMoney(exp.amount)}`, () => deleteExpense(exp.id))} title="Удалить"><IconDelete /></button>
+              </div></td>}
+            </tr>
+          )}
+        />
+      </div>
+
+      {/* Выплаты */}
+      <div>
+        <h3 style={{ marginBottom: '16px', fontSize: '1.1rem', fontWeight: 600 }}>Выплаты</h3>
+        <DataTable
+          items={payouts}
+          columns={[
+            { key: 'date', label: 'Дата', sortValue: (p) => p.date },
+            { key: 'crew', label: 'Бригада', sortValue: (p) => p.crew?.name || '' },
+            { key: 'amount', label: 'Сумма', className: 'text-right', sortValue: (p) => p.amount },
+            { key: 'method', label: 'Способ', sortValue: (p) => p.payment_method },
+            { key: 'comment', label: 'Комментарий' },
+            isAdmin && { key: 'actions', label: 'Действия', className: 'text-center' },
+          ]}
+          defaultSortKey="date"
+          searchFields={(p) => `${p.crew?.name || ''} ${p.comment || ''} ${p.date} ${p.amount}`}
+          emptyMessage="Нет выплат" emptyIcon="💸"
+          showCheckboxes={isAdmin}
+          onDeleteMany={isAdmin ? (ids) => onDeleteMany('Удалить выплаты?', ids, deletePayout) : undefined}
+          renderRow={(p, sel, toggle) => (
+            <tr key={p.id} className={sel ? 'table-row--selected' : ''}>
+              {isAdmin && <td style={{ textAlign: 'center' }}><input type="checkbox" checked={sel} onChange={toggle} /></td>}
+              <td style={{ whiteSpace: 'nowrap' }}>{formatDate(p.date)}</td>
+              <td><strong>{p.crew?.name || `#${p.crew_id}`}</strong></td>
+              <td className="text-right text-bold">{formatMoney(p.amount)}</td>
+              <td>{PAYMENT_METHOD_LABELS[p.payment_method]}</td>
+              <td className="text-muted">{p.comment || '—'}</td>
+              {isAdmin && <td><div className="table-actions">
+                <Link to={`/projects/${projectId}/payouts/${p.id}/edit`} className="table-action table-action--edit" title="Редактировать"><IconEdit /></Link>
+                <button className="table-action table-action--delete" onClick={() => onDelete('Удалить выплату?', `${p.crew?.name} — ${formatMoney(p.amount)}`, () => deletePayout(p.id))} title="Удалить"><IconDelete /></button>
+              </div></td>}
+            </tr>
+          )}
+        />
+      </div>
     </div>
   );
 }
 
+/** Строка сводки по бригаде с id для DataTable */
+type CrewSummaryRow = ProjectReport['crews_summary'][number] & { id: number };
+
 function CrewsTable({ report }: { report: ProjectReport }) {
-  if (!report.crews_summary || report.crews_summary.length === 0) return <EmptyState message="Нет данных по бригадам" icon="👷" />;
+  const rows: CrewSummaryRow[] = (report.crews_summary || []).map((cs) => ({ ...cs, id: cs.crew.id }));
+  if (rows.length === 0) return <EmptyState message="Нет данных по бригадам" icon="👷" />;
   return (
-    <div className="table-wrap"><table className="table">
-      <thead><tr><th>Бригада</th><th className="text-right">Начислено</th><th className="text-right">Выплачено</th><th className="text-right">Долг</th></tr></thead>
-      <tbody>{report.crews_summary.map((cs) => (
-        <tr key={cs.crew.id}>
-          <td><strong>{cs.crew.name}</strong></td>
-          <td className="text-right">{formatMoney(cs.accrued)}</td>
-          <td className="text-right">{formatMoney(cs.paid)}</td>
-          <td className={`text-right ${cs.debt > 0 ? 'text-danger' : 'text-success'}`}>{formatMoney(cs.debt)}</td>
+    <DataTable<CrewSummaryRow>
+      items={rows}
+      columns={[
+        { key: 'name', label: 'Бригада', sortValue: (r) => r.crew.name },
+        { key: 'accrued', label: 'Начислено', className: 'text-right', sortValue: (r) => r.accrued },
+        { key: 'paid', label: 'Выплачено', className: 'text-right', sortValue: (r) => r.paid },
+        { key: 'debt', label: 'Долг', className: 'text-right', sortValue: (r) => r.debt },
+      ]}
+      defaultSortKey="name"
+      defaultSortDir="asc"
+      searchFields={(r) => `${r.crew.name} ${formatMoney(r.accrued)} ${formatMoney(r.paid)} ${formatMoney(r.debt)}`}
+      emptyMessage="Нет данных по бригадам"
+      emptyIcon="👷"
+      showCheckboxes={false}
+      renderRow={(r) => (
+        <tr key={r.id}>
+          <td><strong>{r.crew.name}</strong></td>
+          <td className="text-right">{formatMoney(r.accrued)}</td>
+          <td className="text-right">{formatMoney(r.paid)}</td>
+          <td className={`text-right ${r.debt > 0 ? 'text-danger' : 'text-success'}`}>{formatMoney(r.debt)}</td>
         </tr>
-      ))}</tbody>
-    </table></div>
+      )}
+    />
   );
 }

@@ -24,7 +24,12 @@ export function ProtectedRoute({ children, requiredRole }: Props) {
   }
 
   if (requiredRole && user.role !== requiredRole) {
-    return <Navigate to="/" replace />;
+    // SuperAdmin может иметь доступ к admin-маршрутам
+    if (requiredRole === 'admin' && user.role === 'superAdmin') {
+      // Разрешаем доступ
+    } else {
+      return <Navigate to="/dashboard" replace />;
+    }
   }
 
   return <>{children}</>;

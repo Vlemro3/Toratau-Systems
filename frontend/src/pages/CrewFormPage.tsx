@@ -19,6 +19,7 @@ export function CrewFormPage() {
   const [form, setForm] = useState<CrewCreate>({
     name: '',
     contact: '',
+    phone: '',
     notes: '',
     is_active: true,
   });
@@ -30,6 +31,7 @@ export function CrewFormPage() {
           setForm({
             name: c.name,
             contact: c.contact,
+            phone: c.phone || '',
             notes: c.notes,
             is_active: c.is_active,
           })
@@ -70,25 +72,33 @@ export function CrewFormPage() {
   return (
     <div className="page">
       <div className="page__header">
-        <h2 className="page__title">{isEdit ? 'Редактирование подрядчика' : 'Новый подрядчик'}</h2>
+        <div className="page__header-left">
+          <h2 className="page__title">{isEdit ? 'Редактирование подрядчика' : 'Новый подрядчик'}</h2>
+        </div>
       </div>
 
       {error && <div className="alert alert--error">{error}</div>}
 
-      <form onSubmit={handleSubmit} className="form">
-        <div className="form-group">
-          <label>Название бригады *</label>
-          <input name="name" value={form.name} onChange={handleChange} required />
+      <form onSubmit={handleSubmit} className="form form--wide">
+        <div className="form-row">
+          <div className="form-group">
+            <label>Название бригады *</label>
+            <input name="name" value={form.name} onChange={handleChange} required placeholder="Например: Бригада Иванова" />
+          </div>
+          <div className="form-group">
+            <label>Контактное лицо</label>
+            <input name="contact" value={form.contact} onChange={handleChange} placeholder="Иванов С.П." />
+          </div>
         </div>
 
         <div className="form-group">
-          <label>Контакт (имя / телефон)</label>
-          <input name="contact" value={form.contact} onChange={handleChange} />
+          <label>Телефон</label>
+          <input type="tel" name="phone" value={form.phone || ''} onChange={handleChange} placeholder="+7 (999) 123-45-67" />
         </div>
 
         <div className="form-group">
           <label>Примечание</label>
-          <textarea name="notes" value={form.notes} onChange={handleChange} rows={3} />
+          <textarea name="notes" value={form.notes} onChange={handleChange} rows={3} placeholder="Дополнительная информация..." />
         </div>
 
         <div className="form-group form-group--checkbox">
@@ -104,12 +114,12 @@ export function CrewFormPage() {
         </div>
 
         <div className="form__actions">
-          <button type="button" className="btn btn--secondary" onClick={() => navigate('/crews')}>
-            Отмена
-          </button>
-          <button type="submit" className="btn btn--primary" disabled={saving}>
-            {saving ? 'Сохранение...' : isEdit ? 'Сохранить' : 'Создать'}
-          </button>
+          <div className="form__actions-right">
+            <button type="button" className="btn btn--secondary" onClick={() => navigate('/contacts')}>Отмена</button>
+            <button type="submit" className="btn btn--primary" disabled={saving}>
+              {saving ? 'Сохранение...' : isEdit ? 'Сохранить' : 'Создать'}
+            </button>
+          </div>
         </div>
       </form>
     </div>

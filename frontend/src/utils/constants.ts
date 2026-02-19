@@ -80,4 +80,5 @@ export const WORK_CATEGORIES = [
 export const ROLE_LABELS: Record<string, string> = {
   admin: 'Администратор',
   foreman: 'Прораб',
+  superAdmin: 'Супер-администратор',
 };

@@ -1,28 +1,24 @@
 /**
- * Индикатор риска (зелёный / жёлтый / красный).
- * Основан на отклонении от плана.
+ * Индикатор риска (зелёный / жёлтый / красный) по балансу.
+ * > 500 000 руб — зелёный, 50 000–500 000 — жёлтый, < 50 000 или отрицательный — красный.
  */
 interface Props {
-  deviation: number;
-  plannedCost: number;
+  balance: number;
 }
 
-export function RiskIndicator({ deviation, plannedCost }: Props) {
-  if (plannedCost === 0) {
-    return <span className="risk-indicator risk-indicator--gray" title="Нет плана">●</span>;
-  }
+const LIMIT_GREEN = 500_000;
+const LIMIT_YELLOW = 50_000;
 
-  const ratio = deviation / plannedCost;
-
+export function RiskIndicator({ balance }: Props) {
   let className = 'risk-indicator--green';
-  let title = 'В рамках плана';
+  let title = 'Баланс более 500 000 руб';
 
-  if (ratio > 0.1) {
+  if (balance < LIMIT_YELLOW || balance < 0) {
     className = 'risk-indicator--red';
-    title = 'Превышение плана > 10%';
-  } else if (ratio > 0.0) {
+    title = 'Баланс менее 50 000 руб или отрицательный';
+  } else if (balance < LIMIT_GREEN) {
     className = 'risk-indicator--yellow';
-    title = 'Есть отклонение от плана';
+    title = 'Баланс от 50 000 до 500 000 руб';
   }
 
   return (

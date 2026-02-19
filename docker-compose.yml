@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  # --- PostgreSQL ---
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: toratau
+      POSTGRES_USER: toratau
+      POSTGRES_PASSWORD: toratau_secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U toratau"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --- Backend (FastAPI) ---
+  # Раскомментируйте, когда бэкенд будет готов
+  # backend:
+  #   build: ./backend
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8000:8000"
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #   environment:
+  #     DATABASE_URL: postgresql://toratau:toratau_secret@db:5432/toratau
+  #     SECRET_KEY: change-me-in-production
+  #     UPLOAD_DIR: /app/uploads
+  #   volumes:
+  #     - uploads:/app/uploads
+
+  # --- Frontend (React + Nginx) ---
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    # depends_on:
+    #   - backend
+
+  # --- Ngrok Tunnel (публичный доступ) ---
+  # Для использования ngrok:
+  # 1. Зарегистрируйтесь на https://dashboard.ngrok.com/signup
+  # 2. Получите authtoken
+  # 3. Раскомментируйте и добавьте NGROK_AUTHTOKEN в environment
+  # ngrok:
+  #   image: ngrok/ngrok:latest
+  #   restart: unless-stopped
+  #   command: start --all --config /etc/ngrok.yml
+  #   environment:
+  #     - NGROK_AUTHTOKEN=your_token_here
+  #   volumes:
+  #     - ./ngrok.yml:/etc/ngrok.yml:ro
+  #   depends_on:
+  #     - frontend
+
+  # --- Cloudflare Tunnel (публичный доступ) ---
+  # Временно отключен из-за проблем с подключением
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   restart: unless-stopped
+  #   command: tunnel --no-autoupdate --url http://frontend:80
+  #   depends_on:
+  #     - frontend
+
+  # --- Ngrok Tunnel (публичный доступ) ---
+  # Для использования:
+  # 1. Зарегистрируйтесь на https://dashboard.ngrok.com/signup
+  # 2. Получите authtoken (формат: 2abc123def456ghi789jkl012mno345pq_6R7S8T9U0V1W2X3Y4Z5A6B7C8D)
+  # 3. Раскомментируйте и замените YOUR_NGROK_AUTHTOKEN на ваш токен
+  # ngrok:
+  #   image: ngrok/ngrok:latest
+  #   restart: unless-stopped
+  #   command: start --all --config /etc/ngrok.yml
+  #   environment:
+  #     - NGROK_AUTHTOKEN=YOUR_NGROK_AUTHTOKEN
+  #   volumes:
+  #     - ./ngrok.yml:/etc/ngrok.yml:ro
+  #   depends_on:
+  #     - frontend
+
+volumes:
+  pgdata:
+  # uploads:

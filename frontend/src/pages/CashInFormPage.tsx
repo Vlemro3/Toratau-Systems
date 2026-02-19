@@ -65,13 +65,15 @@ export function CashInFormPage() {
   return (
     <div className="page">
       <div className="page__header">
-        <button className="btn btn--ghost btn--sm" onClick={() => navigate(`/projects/${projId}/payments`)}>← Назад</button>
-        <h2 className="page__title">{isEdit ? 'Редактирование платежа' : 'Добавить платёж от заказчика'}</h2>
+        <div className="page__header-left">
+          <button type="button" className="btn btn--ghost btn--sm" onClick={() => navigate(`/projects/${projId}/payments`)}>← Назад</button>
+          <h2 className="page__title">{isEdit ? 'Редактирование платежа' : 'Добавить платёж от заказчика'}</h2>
+        </div>
       </div>
 
       {error && <div className="alert alert--error">{error}</div>}
 
-      <form onSubmit={handleSubmit} className="form">
+      <form onSubmit={handleSubmit} className="form form--wide">
         <div className="form-row">
           <div className="form-group">
             <label>Дата *</label>

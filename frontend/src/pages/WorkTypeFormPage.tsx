@@ -10,9 +10,9 @@ import type { WorkTypeCreate } from '../types';
 
 export function WorkTypeFormPage() {
   const navigate = useNavigate();
-  const { id, projectId } = useParams<{ id: string; projectId: string }>();
+  const { id } = useParams<{ id: string }>();
   const isEdit = !!id;
-  const backPath = projectId ? `/projects/${projectId}/rates` : '/';
+  const backPath = '/rates';
 
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
@@ -81,12 +81,14 @@ export function WorkTypeFormPage() {
   return (
     <div className="page">
       <div className="page__header">
-        <h2 className="page__title">{isEdit ? 'Редактирование расценки' : 'Новая расценка'}</h2>
+        <div className="page__header-left">
+          <h2 className="page__title">{isEdit ? 'Редактирование расценки' : 'Новая расценка'}</h2>
+        </div>
       </div>
 
       {error && <div className="alert alert--error">{error}</div>}
 
-      <form onSubmit={handleSubmit} className="form">
+      <form onSubmit={handleSubmit} className="form form--wide">
         <div className="form-group">
           <label>Название *</label>
           <input name="name" value={form.name} onChange={handleChange} required placeholder="Например: Штукатурка стен" />
@@ -138,12 +140,12 @@ export function WorkTypeFormPage() {
         </div>
 
         <div className="form__actions">
-          <button type="button" className="btn btn--secondary" onClick={() => navigate(backPath)}>
-            Отмена
-          </button>
-          <button type="submit" className="btn btn--primary" disabled={saving}>
-            {saving ? 'Сохранение...' : isEdit ? 'Сохранить' : 'Создать'}
-          </button>
+          <div className="form__actions-right">
+            <button type="button" className="btn btn--secondary" onClick={() => navigate(backPath)}>Отмена</button>
+            <button type="submit" className="btn btn--primary" disabled={saving}>
+              {saving ? 'Сохранение...' : isEdit ? 'Сохранить' : 'Создать'}
+            </button>
+          </div>
         </div>
       </form>
     </div>

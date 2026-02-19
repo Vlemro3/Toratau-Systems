@@ -23,3 +23,7 @@ export async function updateWorkType(id: number, data: Partial<WorkTypeCreate>):
 export async function deleteWorkType(id: number): Promise<void> {
   return api.delete(`/work-types/${id}`);
 }
+
+export async function adjustAllRates(percentage: number): Promise<WorkType[]> {
+  return api.post<WorkType[]>('/work-types/adjust-rates', { percentage });
+}

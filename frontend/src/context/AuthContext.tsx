@@ -11,7 +11,9 @@ interface AuthContextType {
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
+  setUser: (u: User) => void;
   isAdmin: boolean;
+  isSuperAdmin: boolean;
 }
 
 export const AuthContext = createContext<AuthContextType>({
@@ -20,7 +22,9 @@ export const AuthContext = createContext<AuthContextType>({
   loading: true,
   login: async () => {},
   logout: () => {},
+  setUser: () => {},
   isAdmin: false,
+  isSuperAdmin: false,
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -61,9 +65,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const isAdmin = user?.role === 'admin';
+  const isSuperAdmin = user?.role === 'superAdmin';
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout, isAdmin }}>
+    <AuthContext.Provider value={{ user, token, loading, login, logout, setUser, isAdmin, isSuperAdmin }}>
       {children}
     </AuthContext.Provider>
   );

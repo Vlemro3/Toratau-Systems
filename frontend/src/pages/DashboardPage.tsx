@@ -1,7 +1,8 @@
 /**
- * Дашборд — список объектов с ключевыми метриками
+ * Дашборд — список объектов с ключевыми метриками.
+ * По умолчанию только активные и новые; архивные — в сворачиваемом блоке.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getProjects } from '../api/projects';
 import { getProjectReport } from '../api/reports';
@@ -14,9 +15,21 @@ import { formatMoney } from '../utils/format';
 import { PROJECT_STATUS_LABELS, PROJECT_STATUS_COLORS } from '../utils/constants';
 import type { Project, ProjectReport, ProjectStatus } from '../types';
 
+const ARCHIVED_STATUSES: ProjectStatus[] = ['completed', 'archived'];
+
+function isArchived(status: ProjectStatus) {
+  return ARCHIVED_STATUSES.includes(status);
+}
+
 interface ProjectWithMetrics {
   project: Project;
   report: ProjectReport | null;
+}
+
+function matchSearch(project: Project, q: string) {
+  if (!q.trim()) return true;
+  const lower = q.toLowerCase();
+  return project.name.toLowerCase().includes(lower) || project.client.toLowerCase().includes(lower);
 }
 
 export function DashboardPage() {
@@ -26,12 +39,9 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | ''>('');
+  const [showArchive, setShowArchive] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     try {
       const projects = await getProjects();
       const withMetrics: ProjectWithMetrics[] = await Promise.all(
@@ -46,17 +56,29 @@ export function DashboardPage() {
       );
       setItems(withMetrics);
     } catch (err) {
-      console.error('Ошибка загрузки:', err);
+      // Error already handled by individual report failures
+      if (import.meta.env.DEV) {
+        console.error('Ошибка загрузки:', err);
+      }
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  const filtered = items.filter(({ project }) => {
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const activeItems = items.filter(({ project }) => !isArchived(project.status));
+  const archivedItems = items.filter(({ project }) => isArchived(project.status));
+
+  const filtered = activeItems.filter(({ project }) => {
     if (statusFilter && project.status !== statusFilter) return false;
-    if (search && !project.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (!matchSearch(project, search)) return false;
     return true;
   });
+
+  const archivedFiltered = archivedItems.filter(({ project }) => matchSearch(project, search));
 
   if (loading) return <LoadingSpinner />;
 
@@ -86,17 +108,35 @@ export function DashboardPage() {
           className="filters__select"
         >
           <option value="">Все статусы</option>
-          {Object.entries(PROJECT_STATUS_LABELS).map(([key, label]) => (
-            <option key={key} value={key}>{label}</option>
-          ))}
+          {Object.entries(PROJECT_STATUS_LABELS)
+            .filter(([key]) => !isArchived(key as ProjectStatus))
+            .map(([key, label]) => (
+              <option key={key} value={key}>{label}</option>
+            ))}
         </select>
       </div>
 
-      {filtered.length === 0 ? (
-        <EmptyState message="Объекты не найдены" icon="🏗️" />
+      {/* Кнопка «Показать архив» */}
+      {archivedItems.length > 0 && (
+        <div className="objects-archive-toggle">
+          <button
+            type="button"
+            className="btn btn--ghost objects-archive-toggle__btn"
+            onClick={() => setShowArchive((v) => !v)}
+          >
+            <span className={`objects-archive-toggle__arrow ${showArchive ? 'objects-archive-toggle__arrow--open' : ''}`}>▸</span>
+            {showArchive ? 'Скрыть архив' : 'Показать архив'}
+            <span className="objects-archive-toggle__count">({archivedFiltered.length}{archivedFiltered.length !== archivedItems.length ? ` из ${archivedItems.length}` : ''})</span>
+          </button>
+        </div>
+      )}
+
+      {filtered.length === 0 && !showArchive ? (
+        <EmptyState message="Активных объектов нет" icon="🏗️" />
       ) : (
         <>
-          {/* Мобильные карточки */}
+          {/* Мобильные карточки — активные */}
+          {filtered.length > 0 && (
           <div className="cards cards--mobile-only">
             {filtered.map(({ project, report }) => (
               <div
@@ -132,71 +172,155 @@ export function DashboardPage() {
                       </span>
                     </div>
                     <div className="metric">
-                      <span className="metric__label">Прогноз прибыли</span>
-                      <span className={`metric__value ${report.forecast_profit >= 0 ? 'metric__value--green' : 'metric__value--red'}`}>
-                        {formatMoney(report.forecast_profit)}
-                      </span>
-                    </div>
-                    <div className="metric">
                       <span className="metric__label">Риск</span>
-                      <RiskIndicator deviation={report.plan_deviation} plannedCost={project.planned_cost} />
+                      <RiskIndicator balance={report.balance} />
                     </div>
                   </div>
                 )}
               </div>
             ))}
           </div>
+          )}
 
-          {/* Таблица для десктопа */}
-          <div className="table-wrap table-wrap--desktop-only">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Название</th>
-                  <th>Статус</th>
-                  <th className="text-right">Пришло</th>
-                  <th className="text-right">Факт расход</th>
-                  <th className="text-right">Баланс</th>
-                  <th className="text-right">Прогноз прибыли</th>
-                  <th className="text-center">Риск</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(({ project, report }) => (
-                  <tr
-                    key={project.id}
-                    className="table__row--clickable"
-                    onClick={() => navigate(`/projects/${project.id}`)}
-                  >
-                    <td>
-                      <strong>{project.name}</strong>
-                      <br />
-                      <small className="text-muted">{project.client}</small>
-                    </td>
-                    <td>
-                      <StatusBadge
-                        label={PROJECT_STATUS_LABELS[project.status]}
-                        color={PROJECT_STATUS_COLORS[project.status]}
-                      />
-                    </td>
-                    <td className="text-right">{report ? formatMoney(report.total_cash_in) : '—'}</td>
-                    <td className="text-right">{report ? formatMoney(report.total_fact_expense) : '—'}</td>
-                    <td className={`text-right ${report && report.balance < 0 ? 'text-danger' : ''}`}>
-                      {report ? formatMoney(report.balance) : '—'}
-                    </td>
-                    <td className={`text-right ${report && report.forecast_profit < 0 ? 'text-danger' : ''}`}>
-                      {report ? formatMoney(report.forecast_profit) : '—'}
-                    </td>
-                    <td className="text-center">
-                      {report ? (
-                        <RiskIndicator deviation={report.plan_deviation} plannedCost={project.planned_cost} />
-                      ) : '—'}
-                    </td>
+          {/* Таблица для десктопа — активные */}
+          {filtered.length > 0 && (
+            <div className="table-wrap table-wrap--desktop-only">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Название</th>
+                    <th>Статус</th>
+                    <th className="text-right">Пришло</th>
+                    <th className="text-right">Факт расход</th>
+                    <th className="text-right">Баланс</th>
+                    <th className="text-center">Риск</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filtered.map(({ project, report }) => (
+                    <tr
+                      key={project.id}
+                      className="table__row--clickable"
+                      onClick={() => navigate(`/projects/${project.id}`)}
+                    >
+                      <td>
+                        <strong>{project.name}</strong>
+                        <br />
+                        <small className="text-muted">{project.client}</small>
+                      </td>
+                      <td>
+                        <StatusBadge
+                          label={PROJECT_STATUS_LABELS[project.status]}
+                          color={PROJECT_STATUS_COLORS[project.status]}
+                        />
+                      </td>
+                      <td className="text-right">{report ? formatMoney(report.total_cash_in) : '—'}</td>
+                      <td className="text-right">{report ? formatMoney(report.total_fact_expense) : '—'}</td>
+                      <td className={`text-right ${report && report.balance < 0 ? 'text-danger' : ''}`}>
+                        {report ? formatMoney(report.balance) : '—'}
+                      </td>
+                      <td className="text-center">
+                        {report ? (
+                          <RiskIndicator balance={report.balance} />
+                        ) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Блок архива */}
+          {showArchive && archivedItems.length > 0 && (
+            <div className="objects-archive">
+              <h3 className="objects-archive__title">Архив</h3>
+              {archivedFiltered.length === 0 ? (
+                <p className="text-muted">В архиве по вашему запросу ничего не найдено</p>
+              ) : (
+                <>
+                  <div className="cards cards--mobile-only">
+                    {archivedFiltered.map(({ project, report }) => (
+                      <div
+                        key={project.id}
+                        className="project-card project-card--archived"
+                        onClick={() => navigate(`/projects/${project.id}`)}
+                      >
+                        <div className="project-card__header">
+                          <h3 className="project-card__name">{project.name}</h3>
+                          <StatusBadge
+                            label={PROJECT_STATUS_LABELS[project.status]}
+                            color={PROJECT_STATUS_COLORS[project.status]}
+                          />
+                        </div>
+                        {report && (
+                          <div className="project-card__metrics">
+                            <div className="metric">
+                              <span className="metric__label">Пришло</span>
+                              <span className="metric__value metric__value--green">{formatMoney(report.total_cash_in)}</span>
+                            </div>
+                            <div className="metric">
+                              <span className="metric__label">Баланс</span>
+                              <span className={`metric__value ${report.balance >= 0 ? 'metric__value--green' : 'metric__value--red'}`}>
+                                {formatMoney(report.balance)}
+                              </span>
+                            </div>
+                            <div className="metric">
+                              <span className="metric__label">Риск</span>
+                              <RiskIndicator balance={report.balance} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="table-wrap table-wrap--desktop-only">
+                    <table className="table table--archived">
+                      <thead>
+                        <tr>
+                          <th>Название</th>
+                          <th>Статус</th>
+                          <th className="text-right">Пришло</th>
+                          <th className="text-right">Факт расход</th>
+                          <th className="text-right">Баланс</th>
+                          <th className="text-center">Риск</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {archivedFiltered.map(({ project, report }) => (
+                          <tr
+                            key={project.id}
+                            className="table__row--clickable"
+                            onClick={() => navigate(`/projects/${project.id}`)}
+                          >
+                            <td>
+                              <strong>{project.name}</strong>
+                              <br />
+                              <small className="text-muted">{project.client}</small>
+                            </td>
+                            <td>
+                              <StatusBadge
+                                label={PROJECT_STATUS_LABELS[project.status]}
+                                color={PROJECT_STATUS_COLORS[project.status]}
+                              />
+                            </td>
+                            <td className="text-right">{report ? formatMoney(report.total_cash_in) : '—'}</td>
+                            <td className="text-right">{report ? formatMoney(report.total_fact_expense) : '—'}</td>
+                            <td className={`text-right ${report && report.balance < 0 ? 'text-danger' : ''}`}>
+                              {report ? formatMoney(report.balance) : '—'}
+                            </td>
+                            <td className="text-center">
+                              {report ? <RiskIndicator balance={report.balance} /> : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>

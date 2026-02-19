@@ -30,11 +30,11 @@ export function WorkLogFormPage() {
     work_type_id: 0,
     date: todayISO(),
     volume: 0,
+    accrued_amount: 0,
     comment: '',
   });
 
   const selectedWorkType = workTypes.find((wt) => wt.id === form.work_type_id);
-  const calculatedAmount = selectedWorkType ? form.volume * selectedWorkType.rate : 0;
 
   useEffect(() => {
     const load = async () => {
@@ -53,6 +53,7 @@ export function WorkLogFormPage() {
             work_type_id: wl.work_type_id,
             date: wl.date.slice(0, 10),
             volume: wl.volume,
+            accrued_amount: wl.accrued_amount,
             comment: wl.comment || '',
           });
         } else {
@@ -71,13 +72,14 @@ export function WorkLogFormPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
-    const isNumeric = type === 'number' || name.endsWith('_id') || name === 'volume';
+    const isNumeric = type === 'number' || name.endsWith('_id') || name === 'volume' || name === 'accrued_amount';
     setForm((prev) => ({ ...prev, [name]: isNumeric ? Number(value) : value }));
   };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!form.crew_id || !form.work_type_id) { setError('Выберите бригаду и вид работ'); return; }
+    if (form.accrued_amount == null || form.accrued_amount < 0) { setError('Укажите сумму'); return; }
     setError(''); setSaving(true);
     try {
       if (isEdit) {
@@ -97,13 +99,15 @@ export function WorkLogFormPage() {
   return (
     <div className="page">
       <div className="page__header">
-        <button className="btn btn--ghost btn--sm" onClick={() => navigate(`/projects/${projId}/works`)}>← Назад</button>
-        <h2 className="page__title">{isEdit ? 'Редактирование работы' : 'Добавить работу'}</h2>
+        <div className="page__header-left">
+          <button type="button" className="btn btn--ghost btn--sm" onClick={() => navigate(`/projects/${projId}/works`)}>← Назад</button>
+          <h2 className="page__title">{isEdit ? 'Редактирование работы' : 'Добавить работу'}</h2>
+        </div>
       </div>
 
       {error && <div className="alert alert--error">{error}</div>}
 
-      <form onSubmit={handleSubmit} className="form">
+      <form onSubmit={handleSubmit} className="form form--wide">
         <div className="form-group">
           <label>Вид работ *</label>
           <select name="work_type_id" value={form.work_type_id} onChange={handleChange}>
@@ -127,14 +131,13 @@ export function WorkLogFormPage() {
           </div>
           <div className="form-group">
             <label>Объём ({selectedWorkType?.unit || 'ед.'}) *</label>
-            <input type="number" name="volume" value={form.volume || ''} onChange={handleChange} min="0.01" step="0.01" required autoFocus placeholder="0" />
+            <input type="number" name="volume" value={form.volume || ''} onChange={handleChange} min="0.01" step="0.01" required placeholder="0" />
           </div>
         </div>
 
-        <div className="calculated-amount">
-          <span className="calculated-amount__label">Начислено:</span>
-          <span className="calculated-amount__value">{formatMoney(calculatedAmount)}</span>
-          {selectedWorkType && <small className="text-muted">{form.volume} × {formatMoney(selectedWorkType.rate)}</small>}
+        <div className="form-group">
+          <label>Сумма (руб) *</label>
+          <input type="number" name="accrued_amount" value={form.accrued_amount || ''} onChange={handleChange} min="0" step="0.01" required placeholder="0" />
         </div>
 
         {!isEdit && (

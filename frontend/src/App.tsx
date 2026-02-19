@@ -2,10 +2,16 @@
  * Корневой компонент с маршрутизацией
  */
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { ThemeProvider } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
+import { theme } from './theme';
 import { AuthProvider } from './context/AuthContext';
+import { SubscriptionProvider } from './billing/SubscriptionContext';
+import { SubscriptionGuard } from './billing/SubscriptionGuard';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
+import Landing from './pages/Landing';
 import { DashboardPage } from './pages/DashboardPage';
 import { ProjectPage } from './pages/ProjectPage';
 import { ProjectFormPage } from './pages/ProjectFormPage';
@@ -17,24 +23,44 @@ import { WorkLogFormPage } from './pages/WorkLogFormPage';
 import { PayoutFormPage } from './pages/PayoutFormPage';
 import { CashInFormPage } from './pages/CashInFormPage';
 import { ExpenseFormPage } from './pages/ExpenseFormPage';
+import { ProfilePage } from './pages/ProfilePage';
+import { EmployeesPage } from './pages/EmployeesPage';
+import { OrganizationsPage } from './pages/OrganizationsPage';
+import { OrganizationFormPage } from './pages/OrganizationFormPage';
+import { CounterpartiesPage } from './pages/CounterpartiesPage';
+import { CounterpartyFormPage } from './pages/CounterpartyFormPage';
+import { CounterpartyDocumentsPage } from './pages/CounterpartyDocumentsPage';
+import { DocumentFormPage } from './pages/DocumentFormPage';
+import { DocumentTemplatesPage } from './pages/DocumentTemplatesPage';
+import { BillingPage } from './pages/BillingPage';
+import { SuperAdminDashboard } from './modules/super-admin/pages/SuperAdminDashboard';
+import { PortalsListPage } from './modules/super-admin/pages/PortalsListPage';
+import { PortalDetailsPage } from './modules/super-admin/pages/PortalDetailsPage';
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <BrowserRouter>
+        <AuthProvider>
+          <SubscriptionProvider>
+          <Routes>
+            {/* Публичная landing страница */}
+            <Route path="/" element={<Landing />} />
+            <Route path="/login" element={<LoginPage />} />
 
-          {/* Защищённые маршруты */}
-          <Route
-            element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }
-          >
-            {/* Главная — список объектов */}
-            <Route path="/" element={<DashboardPage />} />
+            {/* Защищённые маршруты */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <SubscriptionGuard>
+                    <Layout />
+                  </SubscriptionGuard>
+                </ProtectedRoute>
+              }
+            >
+              {/* Dashboard — список объектов */}
+              <Route path="/dashboard" element={<DashboardPage />} />
 
             {/* Создание / редактирование объекта */}
             <Route path="/projects/new" element={
@@ -47,11 +73,12 @@ export default function App() {
             {/* Карточка объекта — секции из сайдбара */}
             <Route path="/projects/:id" element={<ProjectPage />} />
             <Route path="/projects/:id/works" element={<ProjectPage />} />
-            <Route path="/projects/:id/payouts" element={<ProjectPage />} />
+            <Route path="/projects/:id/expenses-payouts" element={<ProjectPage />} />
             <Route path="/projects/:id/payments" element={<ProjectPage />} />
+            {/* Старые маршруты для обратной совместимости */}
+            <Route path="/projects/:id/payouts" element={<ProjectPage />} />
             <Route path="/projects/:id/expenses" element={<ProjectPage />} />
             <Route path="/projects/:id/crews" element={<ProjectPage />} />
-            <Route path="/projects/:id/rates" element={<WorkTypesPage />} />
 
             {/* Формы операций внутри объекта (создание + редактирование) */}
             <Route path="/projects/:projectId/work-logs/new" element={<WorkLogFormPage />} />
@@ -74,18 +101,85 @@ export default function App() {
               <ProtectedRoute requiredRole="admin"><CrewFormPage /></ProtectedRoute>
             } />
 
-            {/* Расценки — создание / редактирование */}
-            <Route path="/projects/:projectId/rates/new" element={
+            {/* Расценки (общий справочник, для документов контрагентов) */}
+            <Route path="/rates" element={
+              <ProtectedRoute requiredRole="admin"><WorkTypesPage /></ProtectedRoute>
+            } />
+            <Route path="/rates/new" element={
               <ProtectedRoute requiredRole="admin"><WorkTypeFormPage /></ProtectedRoute>
             } />
-            <Route path="/projects/:projectId/rates/:id/edit" element={
+            <Route path="/rates/:id/edit" element={
               <ProtectedRoute requiredRole="admin"><WorkTypeFormPage /></ProtectedRoute>
+            } />
+
+            {/* Личный кабинет */}
+            <Route path="/profile" element={<ProfilePage />} />
+
+            {/* Сотрудники */}
+            <Route path="/employees" element={
+              <ProtectedRoute requiredRole="admin"><EmployeesPage /></ProtectedRoute>
+            } />
+
+            {/* Мои организации */}
+            <Route path="/organizations" element={
+              <ProtectedRoute requiredRole="admin"><OrganizationsPage /></ProtectedRoute>
+            } />
+            <Route path="/organizations/new" element={
+              <ProtectedRoute requiredRole="admin"><OrganizationFormPage /></ProtectedRoute>
+            } />
+            <Route path="/organizations/:id/edit" element={
+              <ProtectedRoute requiredRole="admin"><OrganizationFormPage /></ProtectedRoute>
+            } />
+
+            {/* Контрагенты */}
+            <Route path="/counterparties" element={
+              <ProtectedRoute requiredRole="admin"><CounterpartiesPage /></ProtectedRoute>
+            } />
+            <Route path="/counterparties/new" element={
+              <ProtectedRoute requiredRole="admin"><CounterpartyFormPage /></ProtectedRoute>
+            } />
+            <Route path="/counterparties/:id/edit" element={
+              <ProtectedRoute requiredRole="admin"><CounterpartyFormPage /></ProtectedRoute>
+            } />
+
+            {/* Документы контрагента */}
+            <Route path="/counterparties/:cpId/documents" element={
+              <ProtectedRoute requiredRole="admin"><CounterpartyDocumentsPage /></ProtectedRoute>
+            } />
+            <Route path="/counterparties/:cpId/documents/new" element={
+              <ProtectedRoute requiredRole="admin"><DocumentFormPage /></ProtectedRoute>
+            } />
+            <Route path="/counterparties/:cpId/documents/:id/edit" element={
+              <ProtectedRoute requiredRole="admin"><DocumentFormPage /></ProtectedRoute>
+            } />
+
+            {/* Шаблоны документов */}
+            <Route path="/document-templates" element={
+              <ProtectedRoute requiredRole="admin"><DocumentTemplatesPage /></ProtectedRoute>
+            } />
+
+            {/* Оплата и подписка */}
+            <Route path="/billing" element={
+              <ProtectedRoute requiredRole="admin"><BillingPage /></ProtectedRoute>
+            } />
+
+            {/* Super Admin */}
+            <Route path="/super-admin" element={
+              <ProtectedRoute requiredRole="superAdmin"><SuperAdminDashboard /></ProtectedRoute>
+            } />
+            <Route path="/super-admin/portals" element={
+              <ProtectedRoute requiredRole="superAdmin"><PortalsListPage /></ProtectedRoute>
+            } />
+            <Route path="/super-admin/portals/:id" element={
+              <ProtectedRoute requiredRole="superAdmin"><PortalDetailsPage /></ProtectedRoute>
             } />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </SubscriptionProvider>
       </AuthProvider>
     </BrowserRouter>
+    </ThemeProvider>
   );
 }

@@ -5,21 +5,23 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { createProject, getProject, updateProject, deleteProject } from '../api/projects';
+import { getCounterparties } from '../api/counterparties';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { PROJECT_STATUS_LABELS } from '../utils/constants';
 import { toInputDate, todayISO } from '../utils/format';
-import type { ProjectCreate } from '../types';
+import type { ProjectCreate, Counterparty } from '../types';
 
 export function ProjectFormPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const isEdit = !!id;
 
-  const [loading, setLoading] = useState(isEdit);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [showDelete, setShowDelete] = useState(false);
+  const [counterparties, setCounterparties] = useState<Counterparty[]>([]);
 
   const [form, setForm] = useState<ProjectCreate>({
     name: '', address: '', client: '',
@@ -28,22 +30,33 @@ export function ProjectFormPage() {
   });
 
   useEffect(() => {
+    const promises: Promise<void>[] = [
+      getCounterparties()
+        .then(setCounterparties)
+        .catch((err) => {
+          if (import.meta.env.DEV) {
+            console.error('Ошибка загрузки контрагентов:', err);
+          }
+        }),
+    ];
     if (isEdit) {
-      getProject(Number(id))
-        .then((p) =>
-          setForm({
-            name: p.name, address: p.address, client: p.client,
-            start_date: toInputDate(p.start_date),
-            end_date: toInputDate(p.end_date) || null,
-            status: p.status,
-            contract_amount: p.contract_amount,
-            planned_cost: p.planned_cost,
-            notes: p.notes,
-          })
-        )
-        .catch((err) => setError(err.message))
-        .finally(() => setLoading(false));
+      promises.push(
+        getProject(Number(id))
+          .then((p) =>
+            setForm({
+              name: p.name, address: p.address, client: p.client,
+              start_date: toInputDate(p.start_date),
+              end_date: toInputDate(p.end_date) || null,
+              status: p.status,
+              contract_amount: p.contract_amount,
+              planned_cost: p.planned_cost,
+              notes: p.notes,
+            })
+          )
+          .catch((err) => setError(err.message))
+      );
     }
+    Promise.all(promises).finally(() => setLoading(false));
   }, [id, isEdit]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -70,7 +83,7 @@ export function ProjectFormPage() {
   const handleDelete = async () => {
     try {
       await deleteProject(Number(id));
-      navigate('/');
+      navigate('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка удаления');
     }
@@ -82,7 +95,9 @@ export function ProjectFormPage() {
   return (
     <div className="page">
       <div className="page__header">
-        <h2 className="page__title">{isEdit ? 'Редактирование объекта' : 'Новый объект'}</h2>
+        <div className="page__header-left">
+          <h2 className="page__title">{isEdit ? 'Редактирование объекта' : 'Новый объект'}</h2>
+        </div>
       </div>
 
       {error && <div className="alert alert--error">{error}</div>}
@@ -95,7 +110,16 @@ export function ProjectFormPage() {
           </div>
           <div className="form-group">
             <label>Заказчик *</label>
-            <input name="client" value={form.client} onChange={handleChange} required placeholder="ООО «Строй»" />
+            {counterparties.length > 0 ? (
+              <select name="client" value={form.client} onChange={handleChange} required>
+                <option value="">— Выберите контрагента —</option>
+                {counterparties.map((cp) => (
+                  <option key={cp.id} value={cp.name}>{cp.name}</option>
+                ))}
+              </select>
+            ) : (
+              <input name="client" value={form.client} onChange={handleChange} required placeholder="Сначала добавьте контрагента" />
+            )}
           </div>
         </div>
 

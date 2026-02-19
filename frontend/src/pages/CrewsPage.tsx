@@ -1,5 +1,6 @@
 /**
- * Контакты подрядчиков — таблица с поиском, пагинацией, массовым удалением
+ * Контакты подрядчиков — таблица с поиском, пагинацией, массовым удалением.
+ * Телефон в списке — кликабельная ссылка tel: для звонка с мобильного.
  */
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -8,6 +9,29 @@ import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DataTable } from '../components/DataTable';
 import type { Crew } from '../types';
+
+/** Нормализация номера для tel: ссылки (для звонка с мобильного) */
+function toTelHref(phone: string | undefined): string {
+  if (!phone) return '';
+  let digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('8')) digits = '7' + digits.slice(1);
+  else if (digits.length === 10) digits = '7' + digits;
+  return digits.length >= 11 ? `tel:+${digits}` : '';
+}
+
+/** Разделение имени и телефона для отображения (поддержка старого формата "Имя, +7 ...") */
+function getDisplayContact(crew: Crew): { name: string; phone: string } {
+  const contact = (crew.contact || '').trim();
+  const phone = (crew.phone || '').trim();
+  if (phone) return { name: contact || '—', phone };
+  const commaIdx = contact.indexOf(',');
+  if (commaIdx > 0) {
+    const part1 = contact.slice(0, commaIdx).trim();
+    const part2 = contact.slice(commaIdx + 1).trim();
+    if (/\d/.test(part2)) return { name: part1 || '—', phone: part2 };
+  }
+  return { name: contact || '—', phone: '' };
+}
 
 const IconEdit = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -69,17 +93,35 @@ export function CrewsPage() {
 
       <DataTable
         items={crews}
-        searchFields={(c) => `${c.name} ${c.contact || ''} ${c.notes || ''}`}
+        columns={[
+          { key: 'name', label: 'Название', sortValue: (c) => c.name },
+          { key: 'contact', label: 'Контактное лицо', sortValue: (c) => getDisplayContact(c).name },
+          { key: 'phone', label: 'Телефон', sortValue: (c) => getDisplayContact(c).phone },
+          { key: 'notes', label: 'Примечание' },
+          { key: 'status', label: 'Статус', className: 'text-center', sortValue: (c) => c.is_active ? 1 : 0 },
+          { key: 'actions', label: 'Действия', className: 'text-center' },
+        ]}
+        defaultSortKey="name"
+        defaultSortDir="asc"
+        searchFields={(c) => `${c.name} ${c.contact || ''} ${c.phone || ''} ${c.notes || ''}`}
         emptyMessage="Подрядчики не добавлены" emptyIcon="📇"
         onDeleteMany={askDeleteMany}
-        renderHead={() => <>
-          <th>Название</th><th>Контакт</th><th>Примечание</th><th className="text-center">Статус</th><th className="text-center">Действия</th>
-        </>}
-        renderRow={(crew, sel, toggle) => (
+        renderRow={(crew, sel, toggle) => {
+          const { name: contactName, phone: contactPhone } = getDisplayContact(crew);
+          return (
           <tr key={crew.id} className={sel ? 'table-row--selected' : ''}>
             <td style={{ textAlign: 'center' }}><input type="checkbox" checked={sel} onChange={toggle} /></td>
             <td><strong>{crew.name}</strong></td>
-            <td>{crew.contact || '—'}</td>
+            <td>{contactName}</td>
+            <td>
+              {contactPhone ? (
+                <a href={toTelHref(contactPhone)} className="table-link-tel" onClick={(e) => e.stopPropagation()}>
+                  {contactPhone}
+                </a>
+              ) : (
+                '—'
+              )}
+            </td>
             <td className="text-muted">{crew.notes || '—'}</td>
             <td className="text-center">
               <span className={`status-dot ${crew.is_active ? 'status-dot--green' : 'status-dot--gray'}`} />
@@ -90,7 +132,8 @@ export function CrewsPage() {
               <button className="table-action table-action--delete" onClick={() => askDelete(crew)} title="Удалить"><IconDelete /></button>
             </div></td>
           </tr>
-        )}
+          );
+        }}
       />
 
       <ConfirmDialog

@@ -19,11 +19,8 @@ interface Props {
 const PROJECT_ITEMS = [
   { path: '',         icon: '📊', label: 'Сводка' },
   { path: '/works',   icon: '🔨', label: 'Работы' },
-  { path: '/payouts', icon: '💸', label: 'Выплаты' },
+  { path: '/expenses-payouts', icon: '💸', label: 'Расходы и выплаты' },
   { path: '/payments',icon: '💰', label: 'Платежи' },
-  { path: '/expenses',icon: '🧾', label: 'Расходы' },
-  { path: '/crews',   icon: '👷', label: 'Бригады' },
-  { path: '/rates',   icon: '📋', label: 'Расценки' },
 ];
 
 export function Sidebar({ open, onClose }: Props) {
@@ -82,9 +79,27 @@ export function Sidebar({ open, onClose }: Props) {
           {/* Глобальные пункты */}
           <div className="sidebar__section-title">Общее</div>
           {isAdmin && (
+            <NavLink to="/rates" className={linkClass} onClick={onClose}>
+              <span className="sidebar__icon">📋</span>
+              <span className="sidebar__text">Расценки</span>
+            </NavLink>
+          )}
+          {isAdmin && (
+            <NavLink to="/counterparties" className={linkClass} onClick={onClose}>
+              <span className="sidebar__icon">🏢</span>
+              <span className="sidebar__text">Контрагенты</span>
+            </NavLink>
+          )}
+          {isAdmin && (
             <NavLink to="/contacts" className={linkClass} onClick={onClose}>
               <span className="sidebar__icon">📇</span>
               <span className="sidebar__text">Контакты подрядчиков</span>
+            </NavLink>
+          )}
+          {isAdmin && (
+            <NavLink to="/document-templates" className={linkClass} onClick={onClose}>
+              <span className="sidebar__icon">📄</span>
+              <span className="sidebar__text">Шаблоны документов</span>
             </NavLink>
           )}
         </nav>

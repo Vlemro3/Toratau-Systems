@@ -23,7 +23,7 @@ export function LoginPage() {
 
     try {
       await login(username, password);
-      navigate('/');
+      navigate('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка авторизации');
     } finally {
@@ -39,7 +39,7 @@ export function LoginPage() {
     setLoading(true);
     try {
       await login(user, pass);
-      navigate('/');
+      navigate('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка авторизации');
     } finally {
@@ -108,6 +108,14 @@ export function LoginPage() {
                   disabled={loading}
                 >
                   Войти как Прораб
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--secondary btn--sm"
+                  onClick={() => quickLogin('superadmin', 'superadmin123')}
+                  disabled={loading}
+                >
+                  Войти как Super Admin
                 </button>
               </div>
             </div>
