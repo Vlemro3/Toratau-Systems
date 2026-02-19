@@ -14,11 +14,14 @@
  *   Для подключения реального платёжного шлюза реализуйте PaymentAdapter
  *   из paymentService.ts и передайте в конструктор PaymentService.
  */
-export { BILLING_CONFIG, formatPrice, calcYearlySavings } from './billingConfig';
-export type { PlanConfig } from './billingConfig';
+export {
+  BILLING_CONFIG, formatPrice, calcYearlySavings,
+  getObjectLimit, canAddProject, getTierPriceMonthly, getInvoiceAmount,
+} from './billingConfig';
+export type { TariffTierConfig } from './billingConfig';
 
 export type {
-  SubscriptionStatus, BillingPlan, InvoiceStatus,
+  SubscriptionStatus, BillingPlan, PlanTier, InvoiceStatus,
   Subscription, Invoice, PaymentLog, SubscribeRequest, SubscriptionInfo,
 } from './billingTypes';
 export { ACCESS_ALLOWED_STATUSES, WARNING_STATUSES } from './billingTypes';

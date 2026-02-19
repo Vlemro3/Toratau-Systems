@@ -50,6 +50,7 @@ export function EditableLogo() {
 
   return (
     <div className={`header__logo-wrap ${isAdmin ? 'header__logo-wrap--editable' : ''}`}>
+      <img src="/logo.png" alt="Toratau" className="header__logo-img" />
       <h1 className="header__logo">{name}</h1>
       {isAdmin && (
         <button

@@ -7,8 +7,8 @@
  * При подключении реального шлюза (Stripe, ЮKassa и т.д.)
  * нужно реализовать интерфейс PaymentAdapter.
  */
-import type { BillingPlan, Invoice, InvoiceStatus, PaymentLog } from './billingTypes';
-import { BILLING_CONFIG } from './billingConfig';
+import type { BillingPlan, Invoice, InvoiceStatus, PaymentLog, PlanTier } from './billingTypes';
+import { getInvoiceAmount } from './billingConfig';
 
 let logId = 1000;
 function genLogId(): number { return ++logId; }
@@ -22,7 +22,7 @@ function genInvoiceId(): number { return ++invoiceId; }
  * остальной код не меняется.
  */
 export interface PaymentAdapter {
-  createInvoice(subscriptionId: number, plan: BillingPlan): Invoice;
+  createInvoice(subscriptionId: number, planTier: PlanTier, planInterval: BillingPlan): Invoice;
   processPayment(invoice: Invoice): Promise<{ success: boolean; details: string }>;
 }
 
@@ -37,15 +37,15 @@ export class MockPaymentAdapter implements PaymentAdapter {
     this.simulateSuccess = value;
   }
 
-  createInvoice(subscriptionId: number, plan: BillingPlan): Invoice {
-    const config = BILLING_CONFIG.plans[plan];
+  createInvoice(subscriptionId: number, planTier: PlanTier, planInterval: BillingPlan): Invoice {
     const now = new Date().toISOString();
-
+    const amount = getInvoiceAmount(planTier, planInterval);
     return {
       id: genInvoiceId(),
       subscriptionId,
-      amount: config.price,
-      plan,
+      amount,
+      plan: planInterval,
+      planTier,
       status: 'pending',
       createdAt: now,
       paidAt: null,
@@ -123,10 +123,10 @@ export class PaymentService {
     }
   }
 
-  createInvoice(subscriptionId: number, plan: BillingPlan): Invoice {
+  createInvoice(subscriptionId: number, planTier: PlanTier, planInterval: BillingPlan): Invoice {
     this.cancelPendingInvoices(subscriptionId);
 
-    const invoice = this.adapter.createInvoice(subscriptionId, plan);
+    const invoice = this.adapter.createInvoice(subscriptionId, planTier, planInterval);
     this.invoices.push(invoice);
 
     this.addLog(
@@ -134,7 +134,7 @@ export class PaymentService {
       'INVOICE_CREATED',
       'pending',
       invoice.amount,
-      `Created invoice for ${plan} plan`
+      `Created invoice for ${planTier} (${planInterval})`
     );
 
     return invoice;
@@ -179,8 +179,8 @@ export class PaymentService {
   }
 
   /** Прямая симуляция успешной оплаты (для UI-кнопки «Симулировать оплату») */
-  simulatePaymentSuccess(subscriptionId: number, plan: BillingPlan): Invoice {
-    const invoice = this.createInvoice(subscriptionId, plan);
+  simulatePaymentSuccess(subscriptionId: number, planTier: PlanTier, planInterval: BillingPlan): Invoice {
+    const invoice = this.createInvoice(subscriptionId, planTier, planInterval);
     const paidAt = new Date().toISOString();
     this.updateInvoiceStatus(invoice.id, 'paid', paidAt);
     this.addLog(invoice.id, 'SIMULATE_SUCCESS', 'paid', invoice.amount, 'Manual simulation: success');
@@ -188,8 +188,8 @@ export class PaymentService {
   }
 
   /** Прямая симуляция неудачной оплаты */
-  simulatePaymentFail(subscriptionId: number, plan: BillingPlan): Invoice {
-    const invoice = this.createInvoice(subscriptionId, plan);
+  simulatePaymentFail(subscriptionId: number, planTier: PlanTier, planInterval: BillingPlan): Invoice {
+    const invoice = this.createInvoice(subscriptionId, planTier, planInterval);
     this.updateInvoiceStatus(invoice.id, 'failed');
     this.addLog(invoice.id, 'SIMULATE_FAIL', 'failed', invoice.amount, 'Manual simulation: failure');
     return { ...this.invoices.find((i) => i.id === invoice.id)! };

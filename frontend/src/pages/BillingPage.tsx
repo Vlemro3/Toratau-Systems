@@ -1,13 +1,17 @@
 /**
  * Страница «Оплата и подписка».
- *
- * Показывает текущий статус, тарифы, историю платежей.
- * Позволяет выбрать план и оплатить (mock).
+ * Тарифы: Start, Business, Premium, Unlim. Интервал: месяц / год (скидка 10%).
  */
 import { useState, useEffect } from 'react';
 import { useSubscription } from '../billing/SubscriptionContext';
-import { BILLING_CONFIG, formatPrice, calcYearlySavings } from '../billing/billingConfig';
-import type { BillingPlan, Invoice, PaymentLog } from '../billing/billingTypes';
+import {
+  BILLING_CONFIG,
+  formatPrice,
+  getInvoiceAmount,
+  calcYearlySavings,
+  getObjectLimit,
+} from '../billing/billingConfig';
+import type { PlanTier, BillingPlan, Invoice, PaymentLog } from '../billing/billingTypes';
 import * as billingApi from '../api/billing';
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -26,13 +30,18 @@ const INVOICE_STATUS: Record<string, string> = {
   cancelled: 'Отменён',
 };
 
-export function BillingPage() {
-  const {
-    subscription, loading, paying, remainingDays,
-    subscribe, refresh,
-  } = useSubscription();
+const TIER_ORDER: PlanTier[] = ['start', 'business', 'premium', 'unlim'];
 
-  const [selectedPlan, setSelectedPlan] = useState<BillingPlan>('monthly');
+function formatObjectLimit(limit: number | null): string {
+  if (limit === null) return 'Объектов без ограничений';
+  return `До ${limit} объектов`;
+}
+
+export function BillingPage() {
+  const { subscription, loading, paying, remainingDays, subscribe, refresh } = useSubscription();
+
+  const [selectedTier, setSelectedTier] = useState<PlanTier>('business');
+  const [selectedInterval, setSelectedInterval] = useState<BillingPlan>('monthly');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [logs, setLogs] = useState<PaymentLog[]>([]);
   const [activeTab, setActiveTab] = useState<'plan' | 'history' | 'logs'>('plan');
@@ -45,7 +54,7 @@ export function BillingPage() {
 
   const handleSubscribe = async () => {
     setPaymentSuccess(false);
-    const invoice = await subscribe(selectedPlan);
+    const invoice = await subscribe(selectedTier, selectedInterval);
     if (invoice && invoice.status === 'paid') {
       setPaymentSuccess(true);
       setTimeout(() => setPaymentSuccess(false), 5000);
@@ -71,7 +80,11 @@ export function BillingPage() {
 
   const statusInfo = STATUS_LABELS[subscription.status] || { label: subscription.status, color: '#666' };
   const periodEnd = new Date(subscription.currentPeriodEnd).toLocaleDateString('ru-RU');
-  const planConfig = BILLING_CONFIG.plans[selectedPlan];
+  const currentTierLabel = subscription.planTier ? BILLING_CONFIG.tiers[subscription.planTier].label : null;
+  const currentLimit = getObjectLimit(subscription);
+  const amount = getInvoiceAmount(selectedTier, selectedInterval);
+  const isYearly = selectedInterval === 'yearly';
+  const savings = isYearly ? calcYearlySavings(selectedTier) : 0;
 
   return (
     <div className="page">
@@ -85,15 +98,14 @@ export function BillingPage() {
         </div>
       )}
 
-      {/* Status card */}
       <div className="billing-status-card">
         <div className="billing-status-card__header">
           <div className="billing-status-card__badge" style={{ background: statusInfo.color }}>
             {statusInfo.label}
           </div>
-          {subscription.plan && (
+          {currentTierLabel && (
             <div className="billing-status-card__plan">
-              Тариф: {BILLING_CONFIG.plans[subscription.plan].label}
+              Тариф: {currentTierLabel} · {currentLimit === null ? 'без ограничений' : `до ${currentLimit} объектов`}
             </div>
           )}
         </div>
@@ -104,9 +116,12 @@ export function BillingPage() {
           </div>
           <div className="billing-status-card__item">
             <span className="billing-status-card__label">Осталось дней</span>
-            <span className="billing-status-card__value" style={{
-              color: remainingDays <= 7 ? 'var(--color-danger)' : 'var(--color-text)',
-            }}>
+            <span
+              className="billing-status-card__value"
+              style={{
+                color: remainingDays <= 7 ? 'var(--color-danger)' : 'var(--color-text)',
+              }}
+            >
               {Math.max(0, remainingDays)}
             </span>
           </div>
@@ -121,7 +136,6 @@ export function BillingPage() {
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="billing-tabs">
         <button
           className={`billing-tabs__tab ${activeTab === 'plan' ? 'billing-tabs__tab--active' : ''}`}
@@ -143,97 +157,103 @@ export function BillingPage() {
         </button>
       </div>
 
-      {/* Plans tab */}
       {activeTab === 'plan' && (
         <div className="billing-plans">
-          <div
-            className={`billing-plan-card ${selectedPlan === 'monthly' ? 'billing-plan-card--selected' : ''}`}
-            onClick={() => setSelectedPlan('monthly')}
-          >
-            <div className="billing-plan-card__header">
-              <h3>Месяц</h3>
-            </div>
-            <div className="billing-plan-card__price">
-              {formatPrice(BILLING_CONFIG.plans.monthly.price)}
-              <span className="billing-plan-card__period">/мес</span>
-            </div>
-            <ul className="billing-plan-card__features">
-              <li>Полный доступ ко всем функциям</li>
-              <li>Неограниченное кол-во объектов</li>
-              <li>Неограниченное кол-во пользователей</li>
-            </ul>
-            <div className="billing-plan-card__radio">
-              <input
-                type="radio"
-                name="plan"
-                checked={selectedPlan === 'monthly'}
-                onChange={() => setSelectedPlan('monthly')}
-              />
-              <label>Выбрать</label>
-            </div>
-          </div>
+          {TIER_ORDER.map((tier) => {
+            const config = BILLING_CONFIG.tiers[tier];
+            const isSelected = selectedTier === tier;
+            return (
+              <div
+                key={tier}
+                className={`billing-plan-card ${isSelected ? 'billing-plan-card--selected' : ''} ${config.highlighted ? 'billing-plan-card--highlight' : ''}`}
+                onClick={() => setSelectedTier(tier)}
+              >
+                <div className="billing-plan-card__header">
+                  <h3>{config.label}</h3>
+                  {config.highlighted && (
+                    <span className="billing-plan-card__badge">Популярный выбор</span>
+                  )}
+                </div>
+                <div className="billing-plan-card__price">
+                  {formatPrice(config.priceMonthly)}
+                  <span className="billing-plan-card__period">/мес</span>
+                </div>
+                <p className="billing-plan-card__limit">{formatObjectLimit(config.objectLimit)}</p>
+                <ul className="billing-plan-card__features">
+                  <li>Полный доступ к функциям портала</li>
+                  <li>Стоимость за всю компанию</li>
+                </ul>
+                <div className="billing-plan-card__radio">
+                  <input
+                    type="radio"
+                    name="tier"
+                    checked={isSelected}
+                    onChange={() => setSelectedTier(tier)}
+                  />
+                  <label>Выбрать</label>
+                </div>
+              </div>
+            );
+          })}
 
-          <div
-            className={`billing-plan-card ${selectedPlan === 'yearly' ? 'billing-plan-card--selected' : ''}`}
-            onClick={() => setSelectedPlan('yearly')}
-          >
-            <div className="billing-plan-card__header">
-              <h3>Год</h3>
-              <span className="billing-plan-card__badge">
-                Выгода {formatPrice(calcYearlySavings())}
-              </span>
-            </div>
-            <div className="billing-plan-card__price">
-              {formatPrice(BILLING_CONFIG.plans.yearly.price)}
-              <span className="billing-plan-card__period">/год</span>
-            </div>
-            <div className="billing-plan-card__monthly-equiv">
-              ≈ {formatPrice(Math.round(BILLING_CONFIG.plans.yearly.price / 12))}/мес
-            </div>
-            <ul className="billing-plan-card__features">
-              <li>Всё из месячного тарифа</li>
-              <li>Скидка {BILLING_CONFIG.plans.yearly.discountPercent}%</li>
-              <li>Приоритетная поддержка</li>
-            </ul>
-            <div className="billing-plan-card__radio">
+          <div className="billing-interval" style={{ gridColumn: '1 / -1', marginTop: 8 }}>
+            <label style={{ marginRight: 16 }}>
               <input
                 type="radio"
-                name="plan"
-                checked={selectedPlan === 'yearly'}
-                onChange={() => setSelectedPlan('yearly')}
+                name="interval"
+                checked={selectedInterval === 'monthly'}
+                onChange={() => setSelectedInterval('monthly')}
               />
-              <label>Выбрать</label>
-            </div>
+              Оплата помесячно
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="interval"
+                checked={selectedInterval === 'yearly'}
+                onChange={() => setSelectedInterval('yearly')}
+              />
+              Оплата за год (скидка {BILLING_CONFIG.yearlyDiscountPercent}%)
+            </label>
           </div>
 
           <div className="billing-summary">
             <div className="billing-summary__row">
               <span>Тариф</span>
-              <span>{planConfig.label}</span>
+              <span>{BILLING_CONFIG.tiers[selectedTier].label}</span>
             </div>
             <div className="billing-summary__row">
-              <span>Срок</span>
-              <span>{planConfig.durationDays} дней</span>
+              <span>Объектов</span>
+              <span>{formatObjectLimit(BILLING_CONFIG.tiers[selectedTier].objectLimit)}</span>
             </div>
+            <div className="billing-summary__row">
+              <span>Период</span>
+              <span>{selectedInterval === 'monthly' ? '1 месяц' : '12 месяцев'}</span>
+            </div>
+            {isYearly && savings > 0 && (
+              <div className="billing-summary__row" style={{ color: 'var(--color-success)' }}>
+                <span>Выгода за год</span>
+                <span>{formatPrice(savings)}</span>
+              </div>
+            )}
             <div className="billing-summary__row billing-summary__row--total">
               <span>К оплате</span>
-              <span>{formatPrice(planConfig.price)}</span>
+              <span>{formatPrice(amount)}</span>
             </div>
             <button
               className="btn btn--primary btn--lg billing-summary__btn"
               onClick={handleSubscribe}
               disabled={paying}
             >
-              {paying ? 'Обработка оплаты...' : `Оплатить ${formatPrice(planConfig.price)}`}
+              {paying ? 'Обработка оплаты...' : `Оплатить ${formatPrice(amount)}`}
             </button>
             <p className="billing-summary__note">
-              Оплата будет обработана через mock-платёжную систему
+              Стоимость указана за месяц использования портала. При оплате за год — скидка 10%.
             </p>
           </div>
         </div>
       )}
 
-      {/* Invoices tab */}
       {activeTab === 'history' && (
         <div className="card">
           <div className="card__body">
@@ -257,10 +277,12 @@ export function BillingPage() {
                     <tr key={inv.id}>
                       <td>#{inv.id}</td>
                       <td>{new Date(inv.createdAt).toLocaleDateString('ru-RU')}</td>
-                      <td>{BILLING_CONFIG.plans[inv.plan]?.label || inv.plan}</td>
+                      <td>{BILLING_CONFIG.tiers[inv.planTier]?.label ?? inv.planTier}</td>
                       <td>{formatPrice(inv.amount)}</td>
                       <td>
-                        <span className={`badge badge--${inv.status === 'paid' ? 'success' : inv.status === 'failed' ? 'danger' : 'warning'}`}>
+                        <span
+                          className={`badge badge--${inv.status === 'paid' ? 'success' : inv.status === 'failed' ? 'danger' : 'warning'}`}
+                        >
                           {INVOICE_STATUS[inv.status] || inv.status}
                         </span>
                       </td>
@@ -273,7 +295,6 @@ export function BillingPage() {
         </div>
       )}
 
-      {/* Logs tab */}
       {activeTab === 'logs' && (
         <div className="card">
           <div className="card__body">
@@ -298,7 +319,9 @@ export function BillingPage() {
                       <td>{new Date(log.timestamp).toLocaleString('ru-RU')}</td>
                       <td>{log.action}</td>
                       <td>
-                        <span className={`badge badge--${log.status === 'paid' ? 'success' : log.status === 'failed' ? 'danger' : 'warning'}`}>
+                        <span
+                          className={`badge badge--${log.status === 'paid' ? 'success' : log.status === 'failed' ? 'danger' : 'warning'}`}
+                        >
                           {log.status}
                         </span>
                       </td>

@@ -7,14 +7,16 @@
  *
  * Позволяет тестировать логику изолированно от UI.
  */
-import type { Subscription, SubscriptionStatus, BillingPlan } from './billingTypes';
+import type { Subscription, SubscriptionStatus, BillingPlan, PlanTier } from './billingTypes';
 import { BILLING_CONFIG } from './billingConfig';
+
+const DURATION_DAYS: Record<BillingPlan, number> = { monthly: 30, yearly: 365 };
 
 export type SubscriptionEvent =
   | { type: 'REGISTER'; userId: number }
   | { type: 'CHECK_EXPIRY' }
-  | { type: 'PAYMENT_INITIATED'; plan: BillingPlan }
-  | { type: 'PAYMENT_SUCCESS'; plan: BillingPlan }
+  | { type: 'PAYMENT_INITIATED'; planTier: PlanTier; planInterval: BillingPlan }
+  | { type: 'PAYMENT_SUCCESS'; planTier: PlanTier; planInterval: BillingPlan }
   | { type: 'PAYMENT_FAILED' }
   | { type: 'ADMIN_BLOCK'; reason: string }
   | { type: 'ADMIN_UNBLOCK' };
@@ -48,6 +50,8 @@ export function createTrialSubscription(userId: number, id: number): Subscriptio
     userId,
     status: 'trial',
     plan: null,
+    planTier: null,
+    planInterval: null,
     currentPeriodStart: now,
     currentPeriodEnd: trialEnd,
     trialEndsAt: trialEnd,
@@ -134,23 +138,21 @@ export function transition(
       ];
       if (!canSucceed.includes(sub.status)) return null;
 
-      const planConfig = BILLING_CONFIG.plans[event.plan];
+      const durationDays = DURATION_DAYS[event.planInterval];
       const periodStart = now;
-      /**
-       * Если подписка ещё активна (expiring / trial) — продлеваем от конца текущего периода,
-       * а не от текущего момента, чтобы не «срезать» оплаченные дни.
-       */
       const extendFrom =
         (sub.status === 'expiring' || sub.status === 'trial') &&
         daysUntil(sub.currentPeriodEnd) > 0
           ? sub.currentPeriodEnd
           : periodStart;
-      const periodEnd = addDays(extendFrom, planConfig.durationDays);
+      const periodEnd = addDays(extendFrom, durationDays);
 
       return {
         ...sub,
         status: 'active',
-        plan: event.plan,
+        plan: event.planInterval,
+        planTier: event.planTier,
+        planInterval: event.planInterval,
         currentPeriodStart: periodStart,
         currentPeriodEnd: periodEnd,
         trialEndsAt: sub.trialEndsAt,

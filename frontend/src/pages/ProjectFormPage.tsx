@@ -1,13 +1,15 @@
 /**
  * Форма создания / редактирования объекта.
- * Все поля одинаковой ширины, аккуратная раскладка.
+ * При создании проверяется лимит объектов по тарифу подписки.
  */
 import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { createProject, getProject, updateProject, deleteProject } from '../api/projects';
+import { createProject, getProject, updateProject, deleteProject, getProjects } from '../api/projects';
 import { getCounterparties } from '../api/counterparties';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { useSubscription } from '../billing/SubscriptionContext';
+import { canAddProject } from '../billing/billingConfig';
 import { PROJECT_STATUS_LABELS } from '../utils/constants';
 import { toInputDate, todayISO } from '../utils/format';
 import type { ProjectCreate, Counterparty } from '../types';
@@ -17,10 +19,12 @@ export function ProjectFormPage() {
   const { id } = useParams<{ id: string }>();
   const isEdit = !!id;
 
+  const { subscription } = useSubscription();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [showDelete, setShowDelete] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [counterparties, setCounterparties] = useState<Counterparty[]>([]);
 
   const [form, setForm] = useState<ProjectCreate>({
@@ -72,6 +76,12 @@ export function ProjectFormPage() {
         await updateProject(Number(id), form);
         navigate(`/projects/${id}`);
       } else {
+        const projects = await getProjects();
+        if (!canAddProject(subscription, projects.length)) {
+          setShowUpgradeModal(true);
+          setSaving(false);
+          return;
+        }
         const created = await createProject(form);
         navigate(`/projects/${created.id}`);
       }
@@ -190,6 +200,27 @@ export function ProjectFormPage() {
         onCancel={() => setShowDelete(false)}
         danger
       />
+
+      {showUpgradeModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div className="card" style={{ maxWidth: 400, margin: 16 }}>
+            <div className="card__body">
+              <h3 style={{ marginTop: 0 }}>Достигнут лимит объектов</h3>
+              <p className="text-muted">
+                По вашему тарифу нельзя добавить больше объектов. Смените тариф в разделе «Оплата и подписка», чтобы создавать новые объекты.
+              </p>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+                <button type="button" className="btn btn--secondary" onClick={() => setShowUpgradeModal(false)}>
+                  Закрыть
+                </button>
+                <button type="button" className="btn btn--primary" onClick={() => navigate('/billing')}>
+                  Перейти к тарифам
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { createDocument, getDocument, updateDocument } from '../api/documents';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { getDocType } from '../utils/documentTypes';
 import { generateAndDownloadDocx } from '../utils/generateDocx';
+import { numberToWords } from '../utils/format';
 import type { Counterparty, Organization, CpDocumentCreate, DocLineItem, WorkType } from '../types';
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -263,12 +264,82 @@ export function DocumentFormPage() {
     });
   };
 
-  const total = (form.items || []).reduce((s, i) => {
-    if (isKs3 && i.cost_for_period !== undefined) {
-      return s + (i.cost_for_period || 0);
+  // Определяем типы документов до использования в вычислениях
+  const isActAcceptance = form.doc_type === 'act_acceptance' || form.doc_type === 'act_ks2';
+  const isPremisesTransfer = form.doc_type === 'act_premises_transfer';
+  const isPowerOfAttorney = form.doc_type === 'power_of_attorney';
+  const isCommercialOffer = form.doc_type === 'commercial_offer';
+  const isContractInvoice = form.doc_type === 'contract_invoice';
+  const isVatInvoice = form.doc_type === 'vat_invoice';
+  const isPaymentInvoice = form.doc_type === 'payment_invoice';
+  const isTorg12 = form.doc_type === 'torg12';
+  const isKs3 = form.doc_type === 'ks3';
+
+  // Расчет итогов с учетом налогообложения
+  const calculateTotals = () => {
+    const itemsTotal = (form.items || []).reduce((s, i) => {
+      if (isKs3 && i.cost_for_period !== undefined) {
+        return s + (Number(i.cost_for_period) || 0);
+      }
+      const qty = Number(i.qty) || 0;
+      const price = Number(i.price) || 0;
+      return s + qty * price;
+    }, 0);
+
+    if (!form.taxation || form.taxation === 'no_vat' || !isPaymentInvoice) {
+      return {
+        totalWithoutVat: itemsTotal,
+        totalVat: 0,
+        totalWithVat: itemsTotal,
+      };
     }
-    return s + i.qty * i.price;
-  }, 0);
+
+    let vatRate = 0;
+    if (form.taxation === 'vat_20') vatRate = 0.20;
+    else if (form.taxation === 'vat_10') vatRate = 0.10;
+    else if (form.taxation === 'vat_0') vatRate = 0;
+    else if (form.taxation === 'vat_included') {
+      // НДС уже включен в сумму
+      const totalWithVat = itemsTotal;
+      const totalWithoutVat = totalWithVat / 1.20; // предполагаем 20%, можно сделать настраиваемым
+      const totalVat = totalWithVat - totalWithoutVat;
+      return {
+        totalWithoutVat: isNaN(totalWithoutVat) || !isFinite(totalWithoutVat) ? 0 : totalWithoutVat,
+        totalVat: isNaN(totalVat) || !isFinite(totalVat) ? 0 : totalVat,
+        totalWithVat: isNaN(totalWithVat) || !isFinite(totalWithVat) ? 0 : totalWithVat,
+      };
+    } else if (form.taxation === 'vat_on_top') {
+      // НДС сверху
+      const totalWithoutVat = itemsTotal;
+      const totalVat = totalWithoutVat * 0.20; // предполагаем 20%
+      const totalWithVat = totalWithoutVat + totalVat;
+      return {
+        totalWithoutVat: isNaN(totalWithoutVat) || !isFinite(totalWithoutVat) ? 0 : totalWithoutVat,
+        totalVat: isNaN(totalVat) || !isFinite(totalVat) ? 0 : totalVat,
+        totalWithVat: isNaN(totalWithVat) || !isFinite(totalWithVat) ? 0 : totalWithVat,
+      };
+    }
+
+    if (vatRate > 0) {
+      const totalWithoutVat = itemsTotal;
+      const totalVat = totalWithoutVat * vatRate;
+      const totalWithVat = totalWithoutVat + totalVat;
+      return {
+        totalWithoutVat: isNaN(totalWithoutVat) || !isFinite(totalWithoutVat) ? 0 : totalWithoutVat,
+        totalVat: isNaN(totalVat) || !isFinite(totalVat) ? 0 : totalVat,
+        totalWithVat: isNaN(totalWithVat) || !isFinite(totalWithVat) ? 0 : totalWithVat,
+      };
+    }
+
+    return {
+      totalWithoutVat: isNaN(itemsTotal) || !isFinite(itemsTotal) ? 0 : itemsTotal,
+      totalVat: 0,
+      totalWithVat: isNaN(itemsTotal) || !isFinite(itemsTotal) ? 0 : itemsTotal,
+    };
+  };
+
+  const totals = calculateTotals();
+  const total = totals.totalWithVat; // Для обратной совместимости
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -361,12 +432,35 @@ export function DocumentFormPage() {
       add_discount_markup: form.add_discount_markup || undefined,
       ks3_reporting_period_from: form.ks3_reporting_period_from || undefined,
       ks3_reporting_period_to: form.ks3_reporting_period_to || undefined,
-      total: items.reduce((s, i) => {
-        if (isKs3 && i.cost_for_period !== undefined) {
-          return s + (i.cost_for_period || 0);
+      total: (() => {
+        const itemsTotal = (items || []).reduce((s, i) => {
+          if (isKs3 && i.cost_for_period !== undefined) {
+            return s + (Number(i.cost_for_period) || 0);
+          }
+          const qty = Number(i.qty) || 0;
+          const price = Number(i.price) || 0;
+          return s + qty * price;
+        }, 0);
+        // Для payment_invoice используем расчет с учетом НДС
+        if (form.doc_type === 'payment_invoice' && form.taxation && form.taxation !== 'no_vat') {
+          let vatRate = 0;
+          if (form.taxation === 'vat_20') vatRate = 0.20;
+          else if (form.taxation === 'vat_10') vatRate = 0.10;
+          else if (form.taxation === 'vat_included') {
+            const result = itemsTotal; // НДС уже включен
+            return isNaN(result) || !isFinite(result) ? 0 : result;
+          } else if (form.taxation === 'vat_on_top') {
+            const result = itemsTotal * 1.20; // НДС сверху (20%)
+            return isNaN(result) || !isFinite(result) ? 0 : result;
+          }
+          if (vatRate > 0) {
+            const result = itemsTotal * (1 + vatRate);
+            return isNaN(result) || !isFinite(result) ? 0 : result;
+          }
         }
-        return s + i.qty * i.price;
-      }, 0),
+        const result = itemsTotal;
+        return isNaN(result) || !isFinite(result) ? 0 : result;
+      })(),
       created_at: new Date().toISOString(),
     };
     let org = null;
@@ -382,14 +476,6 @@ export function DocumentFormPage() {
 
   const docType = getDocType(form.doc_type);
   const docName = docType?.name || form.doc_type;
-  const isActAcceptance = form.doc_type === 'act_acceptance' || form.doc_type === 'act_ks2';
-  const isPremisesTransfer = form.doc_type === 'act_premises_transfer';
-  const isPowerOfAttorney = form.doc_type === 'power_of_attorney';
-  const isCommercialOffer = form.doc_type === 'commercial_offer';
-  const isContractInvoice = form.doc_type === 'contract_invoice';
-  const isVatInvoice = form.doc_type === 'vat_invoice';
-  const isTorg12 = form.doc_type === 'torg12';
-  const isKs3 = form.doc_type === 'ks3';
   const showTaxation =
     form.doc_type === 'contract_sale' ||
     form.doc_type === 'contract_spec' ||
@@ -1219,6 +1305,17 @@ export function DocumentFormPage() {
                         ? 'Наименование строительно-монтажных работ и затрат'
                         : 'Наименование товаров, работ, услуг'}
             </h3>
+            {/* Выбор налогообложения для счета на оплату */}
+            {isPaymentInvoice && (
+              <div className="form-group" style={{ marginBottom: 16 }}>
+                <label>Налогообложение (применяется ко всем позициям):</label>
+                <select name="taxation" value={form.taxation || ''} onChange={handleChange} style={{ maxWidth: 300 }}>
+                  {TAXATION_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           {workTypes.length > 0 && (
             <div className="form-group doc-rates-row">
               <label>Добавить из расценок:</label>
@@ -1401,7 +1498,25 @@ export function DocumentFormPage() {
             </div>
             {!isPowerOfAttorney && (
               <div>
-                <strong>Итого: {total.toLocaleString('ru-RU', { minimumFractionDigits: 2 })} руб.</strong>
+                {isPaymentInvoice && form.taxation && form.taxation !== 'no_vat' ? (
+                  <>
+                    <div><strong>Итого без НДС: {totals.totalWithoutVat.toLocaleString('ru-RU', { minimumFractionDigits: 2 })} руб.</strong></div>
+                    <div><strong>НДС: {totals.totalVat.toLocaleString('ru-RU', { minimumFractionDigits: 2 })} руб.</strong></div>
+                    <div><strong>Итого к оплате: {totals.totalWithVat.toLocaleString('ru-RU', { minimumFractionDigits: 2 })} руб.</strong></div>
+                    <div style={{ marginTop: 8, fontSize: '0.9em', color: '#666' }}>
+                      <strong>Всего к оплате:</strong> {numberToWords(totals.totalWithVat)}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <strong>Итого: {total.toLocaleString('ru-RU', { minimumFractionDigits: 2 })} руб.</strong>
+                    {isPaymentInvoice && (
+                      <div style={{ marginTop: 8, fontSize: '0.9em', color: '#666' }}>
+                        <strong>Всего к оплате:</strong> {numberToWords(total)}
+                      </div>
+                    )}
+                  </>
+                )}
                 {(isTorg12 || isKs3) && <><br /><span className="text-muted">Без налога (НДС)</span><br />Всего: {total.toLocaleString('ru-RU', { minimumFractionDigits: 2 })}</>}
               </div>
             )}

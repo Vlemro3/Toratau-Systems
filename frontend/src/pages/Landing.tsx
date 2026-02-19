@@ -20,9 +20,13 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CheckIcon from '@mui/icons-material/Check';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 
+const SECTION_PY = { xs: 5, sm: 6, md: 8 };
+const CONTAINER_PX = { xs: 2, sm: 3 };
+
 const Landing: React.FC = () => {
   const theme = useTheme();
   const isMdUp = useMediaQuery(theme.breakpoints.up('md'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   return (
     <Box
@@ -34,7 +38,7 @@ const Landing: React.FC = () => {
         flexDirection: 'column',
       }}
     >
-      {/* Header */}
+      {/* Header — компактный на мобиле, удобные зоны нажатия */}
       <Box
         component="header"
         sx={{
@@ -44,40 +48,36 @@ const Landing: React.FC = () => {
           zIndex: theme.zIndex.appBar,
           bgcolor: 'background.paper',
           backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
         }}
       >
-        <Container maxWidth="lg">
+        <Container maxWidth="lg" sx={{ px: CONTAINER_PX }}>
           <Box
             sx={{
-              py: 1.5,
+              py: { xs: 1.25, sm: 1.5 },
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: 2,
             }}
           >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
               <Box
+                component="img"
+                src="/logo.png"
+                alt="Toratau"
                 sx={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 1.5,
-                  bgcolor: 'primary.main',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'primary.contrastText',
-                  fontWeight: 700,
-                  fontSize: 18,
+                  width: { xs: 36, sm: 32 },
+                  height: { xs: 36, sm: 32 },
+                  objectFit: 'contain',
+                  display: 'block',
                 }}
-              >
-                T
-              </Box>
+              />
               <Box>
                 <Typography
                   variant="h6"
                   component="div"
-                  sx={{ fontWeight: 700, letterSpacing: 0.3 }}
+                  sx={{ fontWeight: 700, letterSpacing: 0.3, fontSize: { xs: '1.1rem', sm: 'inherit' } }}
                 >
                   Toratau
                 </Typography>
@@ -86,25 +86,33 @@ const Landing: React.FC = () => {
                   color="text.secondary"
                   sx={{ display: { xs: 'none', sm: 'block' } }}
                 >
-                  Контроль денег и бригад
+                  Управление объектами
                 </Typography>
               </Box>
             </Box>
 
-            <Stack direction="row" spacing={1.5} alignItems="center">
+            <Stack direction="row" spacing={1} alignItems="center">
               <Button
                 variant="text"
                 color="inherit"
-                size="small"
                 href="/login"
+                sx={{
+                  minHeight: { xs: 44, sm: 36 },
+                  px: { xs: 1.5, sm: 1 },
+                  fontSize: { xs: '0.95rem', sm: 'inherit' },
+                }}
               >
                 Войти
               </Button>
               <Button
                 variant="contained"
                 color="primary"
-                size="small"
                 href="/register"
+                sx={{
+                  minHeight: { xs: 44, sm: 36 },
+                  px: { xs: 2, sm: 1.5 },
+                  fontSize: { xs: '0.9rem', sm: 'inherit' },
+                }}
               >
                 Зарегистрироваться
               </Button>
@@ -115,24 +123,24 @@ const Landing: React.FC = () => {
 
       {/* Main content */}
       <Box component="main" sx={{ flexGrow: 1 }}>
-        {/* HERO SECTION */}
+        {/* HERO */}
         <Box
           component="section"
           sx={{
-            pt: { xs: 6, md: 10 },
-            pb: { xs: 6, md: 10 },
+            pt: { xs: 4, sm: 6, md: 10 },
+            pb: { xs: 4, sm: 6, md: 10 },
             bgcolor:
               theme.palette.mode === 'light'
                 ? 'grey.50'
                 : theme.palette.background.default,
           }}
         >
-          <Container maxWidth="lg">
-            <Grid container spacing={{ xs: 4, md: 6 }} alignItems="center">
+          <Container maxWidth="lg" sx={{ px: CONTAINER_PX }}>
+            <Grid container spacing={{ xs: 4, sm: 4, md: 6 }} alignItems="center">
               <Grid size={{ xs: 12, md: 6 }}>
-                <Stack spacing={3}>
+                <Stack spacing={{ xs: 2.5, sm: 3 }}>
                   <Chip
-                    label="SaaS для строительных компаний"
+                    label="Хотите знать сколько потратили на объекте?"
                     color="primary"
                     variant="outlined"
                     size="small"
@@ -142,27 +150,35 @@ const Landing: React.FC = () => {
                   <Typography
                     variant={isMdUp ? 'h3' : 'h4'}
                     component="h1"
-                    sx={{ fontWeight: 800, lineHeight: 1.1 }}
+                    sx={{
+                      fontWeight: 800,
+                      lineHeight: 1.15,
+                      fontSize: { xs: '1.65rem', sm: '2rem', md: 'inherit' },
+                    }}
                   >
-                    Контроль прибыли
-                    <br />
-                    на каждом объекте
+                    Простая программа для управления строительной компании
                   </Typography>
 
                   <Typography
                     variant="body1"
                     color="text.secondary"
-                    sx={{ maxWidth: 520 }}
+                    sx={{
+                      maxWidth: 520,
+                      fontSize: { xs: '0.95rem', sm: '1rem' },
+                      lineHeight: 1.6,
+                    }}
                   >
-                    Toratau помогает строительным компаниям видеть реальные
-                    деньги, контролировать бригады и исключать перерасход.
-                    Никакого хаоса в Excel и споров по выплатам — только
-                    прозрачная экономика объектов.
+                    Вы открываете объект — и за 10 секунд понимаете ситуацию
+                    <br />
+                    Прорабы фиксируют выполненные работы за 30 секунд
+                    <br />
+                    Начните видеть реальную прибыль уже сегодня
                   </Typography>
 
                   <Stack
                     direction={{ xs: 'column', sm: 'row' }}
                     spacing={2}
+                    sx={{ '& .MuiButton-root': { minHeight: isMobile ? 48 : 42 } }}
                   >
                     <Button
                       variant="contained"
@@ -170,6 +186,7 @@ const Landing: React.FC = () => {
                       size="large"
                       href="/register"
                       endIcon={<ArrowForwardIcon />}
+                      fullWidth={isMobile}
                     >
                       Попробовать бесплатно
                     </Button>
@@ -178,275 +195,94 @@ const Landing: React.FC = () => {
                       color="inherit"
                       size="large"
                       href="/login"
+                      fullWidth={isMobile}
                     >
                       Войти
                     </Button>
                   </Stack>
 
-                  <Stack
-                    direction={{ xs: 'column', sm: 'row' }}
-                    spacing={2}
-                    sx={{ mt: 1 }}
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ maxWidth: 320, display: 'block' }}
                   >
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ maxWidth: 260 }}
-                    >
-                      14 дней бесплатно, без карты. Подходит для подрядчиков,
-                      девелоперов и компаний с несколькими объектами.
-                    </Typography>
-                  </Stack>
+                    14 дней бесплатно, тарифные планы от 1500 рублей/месяц
+                  </Typography>
                 </Stack>
               </Grid>
 
               <Grid size={{ xs: 12, md: 6 }}>
-                {/* Mock dashboard */}
                 <Card
                   elevation={3}
                   sx={{
-                    borderRadius: 3,
+                    borderRadius: { xs: 2, md: 3 },
                     overflow: 'hidden',
-                    bgcolor:
-                      theme.palette.mode === 'light'
-                        ? 'background.paper'
-                        : 'grey.900',
+                    bgcolor: 'background.paper',
+                    border: theme.palette.mode === 'light' ? '1px solid' : undefined,
+                    borderColor: 'divider',
                   }}
                 >
                   <Box
-                    sx={{
-                      px: 2,
-                      py: 1.5,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      borderBottom: `1px solid ${theme.palette.divider}`,
-                    }}
-                  >
-                    <Typography variant="subtitle2" fontWeight={600}>
-                      Объект: ЖК «Торатау Сити»
-                    </Typography>
-                    <Chip
-                      label="План-факт в норме"
-                      size="small"
-                      color="success"
-                      variant="outlined"
-                    />
-                  </Box>
-                  <CardContent sx={{ p: 2.5 }}>
-                    <Grid container spacing={2}>
-                      <Grid size={{ xs: 12, sm: 4 }}>
-                        <Card
-                          variant="outlined"
-                          sx={{ borderRadius: 2, height: '100%' }}
-                        >
-                          <CardContent sx={{ p: 1.5 }}>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              Маржа по объекту
-                            </Typography>
-                            <Typography
-                              variant="h5"
-                              sx={{ fontWeight: 700, mt: 0.5 }}
-                            >
-                              +18,4%
-                            </Typography>
-                            <Typography
-                              variant="caption"
-                              color="success.main"
-                            >
-                              +2,1% к плану
-                            </Typography>
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 4 }}>
-                        <Card
-                          variant="outlined"
-                          sx={{ borderRadius: 2, height: '100%' }}
-                        >
-                          <CardContent sx={{ p: 1.5 }}>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              Начислено бригадам
-                            </Typography>
-                            <Typography
-                              variant="h5"
-                              sx={{ fontWeight: 700, mt: 0.5 }}
-                            >
-                              4 320 000 ₽
-                            </Typography>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              92% от утверждённого бюджета
-                            </Typography>
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                      <Grid size={{ xs: 12, sm: 4 }}>
-                        <Card
-                          variant="outlined"
-                          sx={{ borderRadius: 2, height: '100%' }}
-                        >
-                          <CardContent sx={{ p: 1.5 }}>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              Выполнено работ
-                            </Typography>
-                            <Typography
-                              variant="h5"
-                              sx={{ fontWeight: 700, mt: 0.5 }}
-                            >
-                              127
-                            </Typography>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              8 задач в работе
-                            </Typography>
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                    </Grid>
-
-                    <Box sx={{ mt: 3 }}>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ mb: 1, display: 'block' }}
-                      >
-                        Последние движения
-                      </Typography>
-                      <Stack spacing={1}>
-                        {[
-                          {
-                            label: 'Начисление за бетонные работы · Бригада №4',
-                            amount: '+ 240 000 ₽',
-                            color: 'success.main',
-                          },
-                          {
-                            label: 'Выплата по закрытому этапу · Бригада №2',
-                            amount: '− 180 000 ₽',
-                            color: 'error.main',
-                          },
-                          {
-                            label: 'Корректировка сметы · Монтаж перекрытий',
-                            amount: '+ 60 000 ₽',
-                            color: 'warning.main',
-                          },
-                        ].map((row, index) => (
-                          <Box
-                            key={index}
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              px: 1.5,
-                              py: 1,
-                              borderRadius: 1.5,
-                              bgcolor:
-                                theme.palette.mode === 'light'
-                                  ? 'grey.50'
-                                  : 'grey.900',
-                            }}
-                          >
-                            <Typography
-                              variant="body2"
-                              color="text.primary"
-                              sx={{ maxWidth: '70%' }}
-                            >
-                              {row.label}
-                            </Typography>
-                            <Typography
-                              variant="body2"
-                              sx={{ fontWeight: 600, color: row.color }}
-                            >
-                              {row.amount}
-                            </Typography>
-                          </Box>
-                        ))}
-                      </Stack>
-                    </Box>
-                  </CardContent>
+                    component="img"
+                    src="/dashboard-preview.png"
+                    alt="Пример дашборда Toratau — сводка по объекту, финансы, бюджет"
+                    sx={{ width: '100%', height: 'auto', display: 'block' }}
+                  />
                 </Card>
               </Grid>
             </Grid>
           </Container>
         </Box>
 
-        {/* БЛОК ПРОБЛЕМЫ */}
-        <Box component="section" sx={{ py: { xs: 6, md: 8 } }}>
-          <Container maxWidth="lg">
-            <Grid
-              container
-              spacing={4}
-              alignItems={{ xs: 'flex-start', md: 'center' }}
-            >
+        {/* ПРОБЛЕМА */}
+        <Box component="section" sx={{ py: SECTION_PY }}>
+          <Container maxWidth="lg" sx={{ px: CONTAINER_PX }}>
+            <Grid container spacing={{ xs: 3, md: 4 }} alignItems={{ xs: 'flex-start', md: 'center' }}>
               <Grid size={{ xs: 12, md: 4 }}>
-                <Typography
-                  variant="overline"
-                  color="primary"
-                  sx={{ letterSpacing: 1, fontWeight: 600 }}
-                >
+                <Typography variant="overline" color="primary" sx={{ letterSpacing: 1, fontWeight: 600 }}>
                   ПРОБЛЕМА
                 </Typography>
                 <Typography
                   variant="h5"
                   component="h2"
-                  sx={{ fontWeight: 700, mt: 1 }}
+                  sx={{ fontWeight: 700, mt: 1, fontSize: { xs: '1.25rem', sm: '1.5rem' } }}
                 >
-                  Вы теряете деньги на объектах?
+                  Нет понимания и прозрачности реального движения денег по объектам
                 </Typography>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mt: 2 }}
-                >
-                  Даже прибыльные объекты «съедаются» перерасходами, путаницей
-                  в учёте и несогласованными выплатами бригадам.
-                  Непрозрачность в цифрах — главный источник потерь.
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 2, lineHeight: 1.6 }}>
+                  Без единой картины по объектам и бригадам до 5–15% бюджета
+                  уходит в неучтённый перерасход, споры по выплатам и «потерянные»
+                  объёмы. Вы узнаёте о проблеме постфактум — когда терять уже нечего.
                 </Typography>
               </Grid>
               <Grid size={{ xs: 12, md: 8 }}>
                 <Grid container spacing={2}>
                   {[
-                    'Нет прозрачности по бригадам',
-                    'Прорабы считают в Excel',
-                    'Нет реального план-факт',
-                    'Конфликты по выплатам',
+                    {
+                      title: 'Кто сколько сделал — в чатах и таблицах',
+                      text: 'Объёмы по бригадам размазаны по Excel и перепискам. Свести в одну картину и увидеть перерасход вовремя невозможно.',
+                    },
+                    {
+                      title: 'План-факт узнаёте, когда уже поздно',
+                      text: 'Отклонения всплывают в конце этапа или при конфликте. Решения принимаются по ощущениям, а не по цифрам.',
+                    },
+                    {
+                      title: 'Споры по выплатам и «забытые» объёмы',
+                      text: 'Бригады и прорабы помнят по-разному. Нет единой базы работ и начислений — только претензии и задержки.',
+                    },
+                    {
+                      title: 'Несколько объектов — хаос в отчётности',
+                      text: 'Сводки собираются вручную, ошибки копятся. Руководитель не видит, где реально теряются деньги.',
+                    },
                   ].map((item) => (
-                    <Grid size={{ xs: 12, sm: 6 }} key={item}>
-                      <Card
-                        variant="outlined"
-                        sx={{
-                          height: '100%',
-                          borderRadius: 2,
-                          borderStyle: 'dashed',
-                        }}
-                      >
-                        <CardContent sx={{ p: 2 }}>
-                          <Typography
-                            variant="subtitle2"
-                            sx={{ fontWeight: 600, mb: 1 }}
-                          >
-                            {item}
+                    <Grid size={{ xs: 12, sm: 6 }} key={item.title}>
+                      <Card variant="outlined" sx={{ height: '100%', borderRadius: 2, borderStyle: 'dashed' }}>
+                        <CardContent sx={{ p: { xs: 2.5, sm: 2 } }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                            {item.title}
                           </Typography>
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                          >
-                            Toratau заменяет разрозненные файлы и устные
-                            договорённости единым источником правды по
-                            каждому объекту и бригаде.
+                          <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.9rem', sm: 'inherit' } }}>
+                            {item.text}
                           </Typography>
                         </CardContent>
                       </Card>
@@ -458,63 +294,121 @@ const Landing: React.FC = () => {
           </Container>
         </Box>
 
-        {/* РЕШЕНИЕ / ФУНКЦИОНАЛ */}
+        {/* ПРОБЛЕМА С ПРОРАБАМИ */}
         <Box
           component="section"
           sx={{
-            py: { xs: 6, md: 8 },
-            bgcolor:
-              theme.palette.mode === 'light'
-                ? 'grey.50'
-                : theme.palette.background.paper,
+            py: SECTION_PY,
+            bgcolor: theme.palette.mode === 'light' ? 'grey.50' : 'background.paper',
           }}
         >
-          <Container maxWidth="lg">
-            <Stack spacing={2} sx={{ mb: 4 }}>
-              <Typography
-                variant="overline"
-                color="primary"
-                sx={{ letterSpacing: 1, fontWeight: 600 }}
-              >
-                РЕШЕНИЕ
+          <Container maxWidth="lg" sx={{ px: CONTAINER_PX }}>
+            <Stack spacing={1} sx={{ mb: { xs: 3, md: 4 } }}>
+              <Typography variant="overline" color="primary" sx={{ letterSpacing: 1, fontWeight: 600 }}>
+                ПРОБЛЕМА С ПРОРАБАМИ
               </Typography>
-              <Typography
-                variant="h5"
-                component="h2"
-                sx={{ fontWeight: 700 }}
-              >
-                Toratau даёт полный финансовый контроль
+              <Typography variant="h5" component="h2" sx={{ fontWeight: 700, fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
+                Прорабы не хотят заполнять документы — и это убивает внедрение
               </Typography>
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ maxWidth: 620 }}
-              >
-                Все данные по выполненным работам, начислениям и выплатам в
-                одной системе. Вы видите план-факт, прибыль и историю действий
-                по каждому объекту без дополнительных файлов и переписок.
+              <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 640, lineHeight: 1.6 }}>
+                Им мешают страх контроля, отсутствие личной выгоды, нежелание тратить время и привычка к хаосу.
+                Если система усложняет жизнь прораба — она не приживётся. Нужно дать владельцу контроль и одновременно — выгоду прорабу.
+              </Typography>
+            </Stack>
+            <Grid container spacing={{ xs: 2, md: 3 }}>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5, color: 'text.secondary' }}>
+                  Почему прорабы саботируют отчётность
+                </Typography>
+                <Stack component="ul" spacing={1} sx={{ pl: 2.5, m: 0, '& li': { fontSize: '0.9rem', color: 'text.secondary', lineHeight: 1.5 } }}>
+                  <li>Боятся контроля и что вскроются перерасходы</li>
+                  <li>Не видят личной выгоды от заполнения</li>
+                  <li>Не хотят тратить время на «бумажки»</li>
+                  <li>Привыкли к хаосу и работе «в голове»</li>
+                </Stack>
+              </Grid>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5, color: 'primary.main' }}>
+                  Почему они будут использовать Toratau
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, lineHeight: 1.6 }}>
+                  Всё заполнение — в несколько кнопок, всегда под рукой: быстрее мессенджеров, проще Excel, выгоднее учёта «в голове».
+                </Typography>
+                <Stack spacing={1}>
+                  {[
+                    'Быстрый расчёт зарплаты и прозрачный учёт бонусов',
+                    'Защита от обвинений: фотофиксация как доказательство',
+                    'Упрощённая отчётность — минимум действий, максимум ясности',
+                  ].map((item) => (
+                    <Box key={item} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                      <CheckIcon sx={{ fontSize: 20, color: 'primary.main', mt: 0.25, flexShrink: 0 }} />
+                      <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.5 }}>
+                        {item}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Stack>
+              </Grid>
+            </Grid>
+          </Container>
+        </Box>
+
+        {/* ФУНКЦИОНАЛ — подробно */}
+        <Box
+          component="section"
+          sx={{
+            py: SECTION_PY,
+            bgcolor: theme.palette.mode === 'light' ? 'background.default' : 'grey.900',
+          }}
+        >
+          <Container maxWidth="lg" sx={{ px: CONTAINER_PX }}>
+            <Stack spacing={2} sx={{ mb: { xs: 3, md: 4 } }}>
+              <Typography variant="overline" color="primary" sx={{ letterSpacing: 1, fontWeight: 600 }}>
+                ФУНКЦИОНАЛ
+              </Typography>
+              <Typography variant="h5" component="h2" sx={{ fontWeight: 700, fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
+                Что умеет Toratau: полный цикл по объекту и бригадам
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 620, lineHeight: 1.6 }}>
+                От создания объекта и справочника расценок до учёта работ, начислений,
+                выплат и отчётов — всё в одном месте. Ниже кратко по возможностям системы.
               </Typography>
             </Stack>
 
             <Grid container spacing={2}>
               {[
-                'Учёт выполненных работ',
-                'Автоматический расчёт начислений',
-                'Контроль выплат бригадам',
-                'План-факт анализ',
-                'Лог действий (AuditLog)',
-                'Управление несколькими объектами',
-              ].map((feature) => (
-                <Grid size={{ xs: 12, sm: 6, md: 4 }} key={feature}>
-                  <Card
-                    variant="outlined"
-                    sx={{ borderRadius: 2, height: '100%' }}
-                  >
-                    <CardContent sx={{ p: 2 }}>
+                {
+                  title: 'Объекты и сводка',
+                  text: 'Создаёте объекты с датами старта и сдачи, плановой себестоимостью и суммой контракта. По каждому объекту — сводка: дни до сдачи, приход денег, баланс (касса), факт расход, начисления и выплаты бригадам. Статусы: в работе, новый, завершён, в архиве.',
+                },
+                {
+                  title: 'Работы и расценки',
+                  text: 'Справочник видов работ с расценками (за единицу объёма). Прорабы или офис вносят выполненные объёмы по объекту и бригаде. Система сама считает начисления по расценкам. Удобно смотреть, кто сколько сделал и сколько начислено.',
+                },
+                {
+                  title: 'Расходы и выплаты бригадам',
+                  text: 'Учёт прочих расходов по объекту (материалы, транспорт и т.п.) и фактических выплат бригадам. Видно приход денег, освоение бюджета, структуру расходов (бригады / прочие) и по категориям. План-факт по объекту в одном экране.',
+                },
+                {
+                  title: 'Подрядчики и контакты',
+                  text: 'Справочник бригад (подрядчиков) с привязкой к объектам. По каждой бригаде — начислено и выплачено. Поиск, сортировка, удобная таблица на десктопе и в мобильной версии.',
+                },
+                {
+                  title: 'План-факт и риск',
+                  text: 'Сравнение плановой себестоимости с фактическими расходами. Индикатор риска по объекту. Оплата контракта и освоение бюджета — в процентах и в деньгах, с наглядными шкалами.',
+                },
+                {
+                  title: 'Несколько объектов и роли',
+                  text: 'Все объекты в одном аккаунте: список с фильтром по статусу и поиском. Разделение прав: администратор настраивает объекты и справочники, прорабы могут вносить работы. Журнал действий (AuditLog) фиксирует изменения для контроля.',
+                },
+              ].map((item) => (
+                <Grid size={{ xs: 12, sm: 6, md: 4 }} key={item.title}>
+                  <Card variant="outlined" sx={{ borderRadius: 2, height: '100%' }}>
+                    <CardContent sx={{ p: { xs: 2.5, sm: 2 } }}>
                       <Box
                         sx={{
-                          width: 32,
-                          height: 32,
+                          width: 36,
+                          height: 36,
                           borderRadius: '50%',
                           bgcolor: 'primary.main',
                           color: 'primary.contrastText',
@@ -524,22 +418,13 @@ const Landing: React.FC = () => {
                           mb: 1.5,
                         }}
                       >
-                        <CheckIcon sx={{ fontSize: 18 }} />
+                        <CheckIcon sx={{ fontSize: 20 }} />
                       </Box>
-                      <Typography
-                        variant="subtitle2"
-                        sx={{ fontWeight: 600, mb: 0.5 }}
-                      >
-                        {feature}
+                      <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                        {item.title}
                       </Typography>
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{ fontSize: 13 }}
-                      >
-                        Торгово-производственная логика уже заложена в
-                        систему: вам остаётся только вносить данные и
-                        контролировать результат.
+                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: 13, lineHeight: 1.55 }}>
+                        {item.text}
                       </Typography>
                     </CardContent>
                   </Card>
@@ -550,63 +435,31 @@ const Landing: React.FC = () => {
         </Box>
 
         {/* КАК ЭТО РАБОТАЕТ */}
-        <Box component="section" sx={{ py: { xs: 6, md: 8 } }}>
-          <Container maxWidth="lg">
-            <Grid container spacing={4} alignItems="center">
+        <Box component="section" sx={{ py: SECTION_PY }}>
+          <Container maxWidth="lg" sx={{ px: CONTAINER_PX }}>
+            <Grid container spacing={{ xs: 3, md: 4 }} alignItems="center">
               <Grid size={{ xs: 12, md: 5 }}>
-                <Typography
-                  variant="overline"
-                  color="primary"
-                  sx={{ letterSpacing: 1, fontWeight: 600 }}
-                >
+                <Typography variant="overline" color="primary" sx={{ letterSpacing: 1, fontWeight: 600 }}>
                   ПРОСТОЙ СТАРТ
                 </Typography>
-                <Typography
-                  variant="h5"
-                  component="h2"
-                  sx={{ fontWeight: 700, mt: 1 }}
-                >
+                <Typography variant="h5" component="h2" sx={{ fontWeight: 700, mt: 1, fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
                   Как это работает
                 </Typography>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mt: 2 }}
-                >
-                  Toratau создавался вместе с подрядчиками и прорабами.
-                  Запуск занимает пару часов, а не недели внедрения. Вся
-                  команда быстро привыкает к понятным сценариям работы.
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 2, lineHeight: 1.6 }}>
+                  Запуск — часы, не месяцы. Создаёте объект, добавляете бригады и расценки.
+                  Прорабы или офис вводят объёмы работ, вы видите начисления и план-факт в одном месте. Без внедренцев.
                 </Typography>
               </Grid>
               <Grid size={{ xs: 12, md: 7 }}>
                 <Grid container spacing={2}>
                   {[
-                    {
-                      step: '1',
-                      title: 'Создайте объект',
-                      text: 'Задайте бюджет, бригады и ключевые этапы работ. Настройте права доступа для офиса и прорабов.',
-                    },
-                    {
-                      step: '2',
-                      title: 'Добавляйте выполненные работы',
-                      text: 'Прорабы фиксируют объёмы, система автоматически считает начисления и показывает отклонения от плана.',
-                    },
-                    {
-                      step: '3',
-                      title: 'Видите прибыль в реальном времени',
-                      text: 'На одном экране — маржа, выплаты и план-факт по каждому объекту и всей компании.',
-                    },
+                    { step: '1', title: 'Создайте объект', text: 'Укажите название, даты, сумму контракта и плановую себестоимость. Добавьте бригады и виды работ с расценками.' },
+                    { step: '2', title: 'Вносите работы и выплаты', text: 'Фиксируйте выполненные объёмы по бригадам — начисления считаются автоматически. Вносите фактические расходы и выплаты.' },
+                    { step: '3', title: 'Смотрите сводку и план-факт', text: 'По каждому объекту: приход денег, баланс, факт расход, начисления и выплаты. Риск и освоение бюджета — на одном экране.' },
                   ].map((item) => (
                     <Grid size={{ xs: 12, sm: 4 }} key={item.step}>
-                      <Card
-                        variant="outlined"
-                        sx={{
-                          borderRadius: 2,
-                          height: '100%',
-                          position: 'relative',
-                        }}
-                      >
-                        <CardContent sx={{ p: 2.5 }}>
+                      <Card variant="outlined" sx={{ borderRadius: 2, height: '100%', position: 'relative' }}>
+                        <CardContent sx={{ p: { xs: 2.5, sm: 2.5 } }}>
                           <Box
                             sx={{
                               position: 'absolute',
@@ -626,17 +479,10 @@ const Landing: React.FC = () => {
                           >
                             {item.step}
                           </Box>
-                          <Typography
-                            variant="subtitle2"
-                            sx={{ fontWeight: 600, mb: 1.5, pr: 4 }}
-                          >
+                          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, pr: 4 }}>
                             {item.title}
                           </Typography>
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            sx={{ fontSize: 13 }}
-                          >
+                          <Typography variant="body2" color="text.secondary" sx={{ fontSize: 13, lineHeight: 1.5 }}>
                             {item.text}
                           </Typography>
                         </CardContent>
@@ -653,15 +499,12 @@ const Landing: React.FC = () => {
         <Box
           component="section"
           sx={{
-            py: { xs: 6, md: 8 },
-            bgcolor:
-              theme.palette.mode === 'light'
-                ? 'grey.50'
-                : theme.palette.background.paper,
+            py: SECTION_PY,
+            bgcolor: theme.palette.mode === 'light' ? 'grey.50' : 'background.paper',
           }}
         >
-          <Container maxWidth="lg">
-            <Grid container spacing={4}>
+          <Container maxWidth="lg" sx={{ px: CONTAINER_PX }}>
+            <Grid container spacing={{ xs: 3, md: 4 }}>
               <Grid size={{ xs: 12, md: 5 }}>
                 <Typography
                   variant="overline"
@@ -670,11 +513,7 @@ const Landing: React.FC = () => {
                 >
                   ДЛЯ КОГО
                 </Typography>
-                <Typography
-                  variant="h5"
-                  component="h2"
-                  sx={{ fontWeight: 700, mt: 1 }}
-                >
+                <Typography variant="h5" component="h2" sx={{ fontWeight: 700, mt: 1, fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
                   Кому подходит Toratau
                 </Typography>
                 <Stack spacing={1.5} sx={{ mt: 3 }}>
@@ -724,30 +563,26 @@ const Landing: React.FC = () => {
                 >
                   ПРЕИМУЩЕСТВА
                 </Typography>
-                <Typography
-                  variant="h5"
-                  component="h3"
-                  sx={{ fontWeight: 700, mt: 1 }}
-                >
-                  Почему компании выбирают Toratau
+                <Typography variant="h5" component="h3" sx={{ fontWeight: 700, mt: 1, fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
+                  Что вы получаете
                 </Typography>
                 <Grid container spacing={2} sx={{ mt: 2 }}>
                   {[
                     {
-                      title: 'Экономия 3–7% бюджета',
-                      text: 'Сокращение перерасходов за счёт прозрачного учёта и контроля план-факт по каждому объекту.',
+                      title: 'Меньше перерасхода — экономия 3–7% бюджета',
+                      text: 'План-факт по каждому объекту и бригаде. Вы видите отклонения до того, как они превращаются в потери.',
                     },
                     {
-                      title: 'Прозрачность выплат',
-                      text: 'Каждая выплата бригаде опирается на зафиксированные объёмы работ и утверждённые расценки.',
+                      title: 'Выплаты без споров',
+                      text: 'Каждая сумма привязана к объёмам и расценкам в системе. Нет «я сделал больше» — есть факт в одном месте.',
                     },
                     {
-                      title: 'Контроль без микроменеджмента',
-                      text: 'Руководство видит картину по объектам, не погружаясь в операционные мелочи.',
+                      title: 'Контроль без тотальной опеки',
+                      text: 'Руководство видит маржу и риски по объектам. Не нужно выбивать отчёты у прорабов и сводить таблицы.',
                     },
                     {
-                      title: 'Всё в одной системе',
-                      text: 'Объекты, бригады, работы, начисления, выплаты и история действий — в едином интерфейсе.',
+                      title: 'Один вход — все объекты',
+                      text: 'Объекты, бригады, работы и выплаты в одном интерфейсе. История действий сохраняется — можно проверить любое решение.',
                     },
                   ].map((item) => (
                     <Grid size={{ xs: 12, sm: 6 }} key={item.title}>
@@ -763,18 +598,11 @@ const Landing: React.FC = () => {
                               : 'grey.900',
                         }}
                       >
-                        <CardContent sx={{ p: 2 }}>
-                          <Typography
-                            variant="subtitle2"
-                            sx={{ fontWeight: 600, mb: 0.5 }}
-                          >
+                        <CardContent sx={{ p: { xs: 2.5, sm: 2 } }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
                             {item.title}
                           </Typography>
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            sx={{ fontSize: 13 }}
-                          >
+                          <Typography variant="body2" color="text.secondary" sx={{ fontSize: 13, lineHeight: 1.5 }}>
                             {item.text}
                           </Typography>
                         </CardContent>
@@ -787,82 +615,93 @@ const Landing: React.FC = () => {
           </Container>
         </Box>
 
+        {/* МОБИЛЬНАЯ ВЕРСИЯ */}
+        <Box component="section" sx={{ py: SECTION_PY }}>
+          <Container maxWidth="lg" sx={{ px: CONTAINER_PX }}>
+            <Grid container spacing={{ xs: 3, md: 4 }} alignItems="center">
+              <Grid size={{ xs: 12, md: 5 }}>
+                <Typography variant="overline" color="primary" sx={{ letterSpacing: 1, fontWeight: 600 }}>
+                  МОБИЛЬНАЯ ВЕРСИЯ
+                </Typography>
+                <Typography
+                  variant="h5"
+                  component="h2"
+                  sx={{ fontWeight: 700, mt: 1, fontSize: { xs: '1.25rem', sm: '1.5rem' } }}
+                >
+                  Удобно с телефона: объекты, бюджет и подрядчики под рукой
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 2, maxWidth: 520, lineHeight: 1.6 }}>
+                  Сводка по объекту, финансы, структура расходов и таблица подрядчиков —
+                  в удобном мобильном интерфейсе. Проверяйте цифры и принимайте решения без ноутбука.
+                </Typography>
+              </Grid>
+              <Grid size={{ xs: 12, md: 7 }} sx={{ display: 'flex', justifyContent: { xs: 'center', md: 'flex-end' }, gap: 2, flexWrap: 'wrap' }}>
+                <Card
+                  elevation={2}
+                  sx={{
+                    borderRadius: 2,
+                    overflow: 'hidden',
+                    width: { xs: '100%', sm: 200, md: 200 },
+                    maxWidth: 220,
+                  }}
+                >
+                  <Box
+                    component="img"
+                    src="/mobile-screenshot-1.png"
+                    alt="Мобильная версия — бюджет и структура расходов по объекту"
+                    sx={{ width: '100%', height: 'auto', display: 'block' }}
+                  />
+                </Card>
+                <Card
+                  elevation={2}
+                  sx={{
+                    borderRadius: 2,
+                    overflow: 'hidden',
+                    width: { xs: '100%', sm: 200, md: 200 },
+                    maxWidth: 220,
+                  }}
+                >
+                  <Box
+                    component="img"
+                    src="/mobile-screenshot-2.png"
+                    alt="Мобильная версия — список объектов и карточки проектов"
+                    sx={{ width: '100%', height: 'auto', display: 'block' }}
+                  />
+                </Card>
+              </Grid>
+            </Grid>
+          </Container>
+        </Box>
+
         {/* ТАРИФЫ */}
-        <Box component="section" sx={{ py: { xs: 6, md: 8 } }}>
-          <Container maxWidth="lg">
-            <Stack spacing={2} sx={{ mb: 4, textAlign: 'center' }}>
-              <Typography
-                variant="overline"
-                color="primary"
-                sx={{ letterSpacing: 1, fontWeight: 600 }}
-              >
+        <Box component="section" sx={{ py: SECTION_PY }}>
+          <Container maxWidth="lg" sx={{ px: CONTAINER_PX }}>
+            <Stack spacing={2} sx={{ mb: { xs: 3, md: 4 } }}>
+              <Typography variant="overline" color="primary" sx={{ letterSpacing: 1, fontWeight: 600 }}>
                 ТАРИФЫ
               </Typography>
-              <Typography
-                variant="h5"
-                component="h2"
-                sx={{ fontWeight: 700 }}
-              >
+              <Typography variant="h5" component="h2" sx={{ fontWeight: 700, fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
                 Простая линейка тарифов
               </Typography>
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ maxWidth: 600, mx: 'auto' }}
-              >
-                Начните с бесплатного периода и выберите тариф, который
-                соответствует масштабу вашей компании и количеству объектов.
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.5 }}>
+                Стоимость указана за месяц использования портала. Цены за всю компанию; при оплате за год — скидка 10%.
               </Typography>
             </Stack>
 
             <Grid container spacing={3}>
               {[
-                {
-                  name: 'Start',
-                  subtitle: 'Для малых подрядчиков',
-                  price: 'от 0 ₽',
-                  features: [
-                    'До 1 объекта',
-                    'До 3 бригад',
-                    'Учёт работ и выплат',
-                    'Базовый план-факт',
-                  ],
-                  highlighted: false,
-                },
-                {
-                  name: 'Business',
-                  subtitle: 'Оптимально для роста',
-                  price: 'по запросу',
-                  features: [
-                    'До 5 объектов',
-                    'Неограниченное число бригад',
-                    'Расширенный план-факт анализ',
-                    'Лог действий (AuditLog)',
-                  ],
-                  highlighted: true,
-                },
-                {
-                  name: 'Pro',
-                  subtitle: 'Для девелоперов и холдингов',
-                  price: 'по запросу',
-                  features: [
-                    'Безлимит по объектам',
-                    'Ролевые модели доступа',
-                    'Интеграции и API',
-                    'Персональный менеджер',
-                  ],
-                  highlighted: false,
-                },
+                { name: 'Start', price: '1 500 ₽/мес', limit: 'До 3 объектов', highlighted: false },
+                { name: 'Business', price: '3 000 ₽/мес', limit: 'До 6 объектов', highlighted: true },
+                { name: 'Premium', price: '5 000 ₽/мес', limit: 'До 10 объектов', highlighted: false },
+                { name: 'Unlim', price: '10 000 ₽/мес', limit: 'Объектов без ограничений', highlighted: false },
               ].map((plan) => (
-                <Grid size={{ xs: 12, md: 4 }} key={plan.name}>
+                <Grid size={{ xs: 12, sm: 6, md: 3 }} key={plan.name}>
                   <Card
                     variant="outlined"
                     sx={{
                       borderRadius: 2.5,
                       height: '100%',
-                      borderColor: plan.highlighted
-                        ? 'primary.main'
-                        : 'divider',
+                      borderColor: plan.highlighted ? 'primary.main' : 'divider',
                       boxShadow: plan.highlighted ? 4 : 0,
                       position: 'relative',
                     }}
@@ -872,60 +711,25 @@ const Landing: React.FC = () => {
                         label="Популярный выбор"
                         color="primary"
                         size="small"
-                        sx={{
-                          position: 'absolute',
-                          top: 12,
-                          right: 12,
-                        }}
+                        sx={{ position: 'absolute', top: 12, right: 12 }}
                       />
                     )}
-                    <CardContent sx={{ p: 3 }}>
-                      <Typography
-                        variant="subtitle2"
-                        sx={{ fontWeight: 700, mb: 0.5 }}
-                      >
+                    <CardContent sx={{ p: { xs: 2.5, sm: 3 } }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
                         {plan.name}
                       </Typography>
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{ mb: 2 }}
-                      >
-                        {plan.subtitle}
-                      </Typography>
-                      <Typography
-                        variant="h6"
-                        sx={{ fontWeight: 700, mb: 2 }}
-                      >
+                      <Typography variant="h6" sx={{ fontWeight: 700, mb: 1.5 }}>
                         {plan.price}
                       </Typography>
-                      <Stack spacing={1.2} sx={{ mb: 3 }}>
-                        {plan.features.map((feature) => (
-                          <Box
-                            key={feature}
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 1,
-                            }}
-                          >
-                            <CheckIcon
-                              sx={{ fontSize: 18, color: 'primary.main' }}
-                            />
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                            >
-                              {feature}
-                            </Typography>
-                          </Box>
-                        ))}
-                      </Stack>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                        {plan.limit}
+                      </Typography>
                       <Button
                         variant={plan.highlighted ? 'contained' : 'outlined'}
                         color="primary"
                         fullWidth
                         href="/register"
+                        sx={{ minHeight: { xs: 48 } }}
                       >
                         Начать бесплатно
                       </Button>
@@ -941,73 +745,53 @@ const Landing: React.FC = () => {
         <Box
           component="section"
           sx={{
-            py: { xs: 6, md: 8 },
-            bgcolor:
-              theme.palette.mode === 'light'
-                ? 'grey.50'
-                : theme.palette.background.paper,
+            py: SECTION_PY,
+            bgcolor: theme.palette.mode === 'light' ? 'grey.50' : 'background.paper',
           }}
         >
-          <Container maxWidth="lg">
-            <Grid container spacing={4}>
+          <Container maxWidth="lg" sx={{ px: CONTAINER_PX }}>
+            <Grid container spacing={{ xs: 3, md: 4 }}>
               <Grid size={{ xs: 12, md: 4 }}>
-                <Typography
-                  variant="overline"
-                  color="primary"
-                  sx={{ letterSpacing: 1, fontWeight: 600 }}
-                >
+                <Typography variant="overline" color="primary" sx={{ letterSpacing: 1, fontWeight: 600 }}>
                   FAQ
                 </Typography>
-                <Typography
-                  variant="h5"
-                  component="h2"
-                  sx={{ fontWeight: 700, mt: 1 }}
-                >
-                  Часто задаваемые вопросы
+                <Typography variant="h5" component="h2" sx={{ fontWeight: 700, mt: 1, fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
+                  Сомневаетесь? Вот ответы
                 </Typography>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mt: 2 }}
-                >
-                  Если у вас остались вопросы по запуску или тарифам, мы с
-                  удовольствием поможем. Ниже — ответы на самые частые.
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 2, lineHeight: 1.6 }}>
+                  Типичные вопросы перед стартом — и короткие ответы, чтобы снять возражения и принять решение.
                 </Typography>
               </Grid>
               <Grid size={{ xs: 12, md: 8 }}>
                 <Stack spacing={1.5}>
                   {[
                     {
-                      q: 'Сколько времени занимает внедрение Toratau?',
-                      a: 'Как правило, базовый запуск занимает 1–2 дня: вы создаёте объекты, добавляете бригады и загружаете актуальные данные. Прорабы начинают фиксировать работы уже в первую неделю.',
+                      q: 'Сложно внедрять? Нужны ли программисты?',
+                      a: 'Нет. Вы создаёте объекты и бригады, прорабы вводят объёмы работ. Запуск за 1–2 дня, без внедренцев. Инструкции и при необходимости онлайн-разбор первых шагов.',
                     },
                     {
-                      q: 'Нужны ли изменения в бухгалтерском учёте?',
-                      a: 'Нет. Toratau не заменяет бухгалтерию, а дополняет её управленческим учётом по объектам и бригадам. Вы можете выгружать данные для бухгалтерии в удобном формате.',
+                      q: 'Не заменяет ли это бухгалтерию? Придётся всё перестраивать?',
+                      a: 'Toratau — управленческий учёт по объектам и бригадам. Бухгалтерию не трогаем: при необходимости выгружаете данные в нужном формате.',
                     },
                     {
-                      q: 'Как считать расценки и начисления бригадам?',
-                      a: 'В системе задаются расценки по видам работ. При вводе выполненного объёма Toratau автоматически рассчитывает начисления по каждому этапу и бригаде.',
+                      q: 'Как считаются начисления бригадам?',
+                      a: 'Задаёте расценки по видам работ. При вводе объёма система сама считает начисления по этапу и бригаде — без пересчётов в Excel.',
                     },
                     {
-                      q: 'Можно ли работать с несколькими объектами одновременно?',
-                      a: 'Да. Toratau изначально спроектирован для компаний с несколькими объектами. Вы видите как детализацию по каждому объекту, так и агрегированную картину по всей компании.',
+                      q: 'У нас несколько объектов. Всё в одной системе?',
+                      a: 'Да. Один вход — все объекты. Детализация по каждому и сводная картина по компании. Так и задумано.',
                     },
                     {
-                      q: 'Как обеспечивается безопасность данных?',
-                      a: 'Все данные передаются по защищённым каналам, доступ разграничивается по ролям, а каждая операция фиксируется в журнале действий (AuditLog).',
+                      q: 'Безопасно ли хранить данные у вас?',
+                      a: 'Доступ по ролям, передача по защищённым каналам. Каждое действие фиксируется в журнале — можно проверить, кто что изменил.',
                     },
                     {
-                      q: 'Что делает Toratau лучше Excel и мессенджеров?',
-                      a: 'В отличие от Excel и чатов, Toratau хранит все данные структурировано, не допускает потери информации и даёт прозрачный план-факт анализ в режиме реального времени.',
+                      q: 'Чем это лучше Excel и чатов?',
+                      a: 'Один источник правды: объёмы, начисления и выплаты в системе, а не в разрозненных файлах и переписках. План-факт в реальном времени, без ручных сводок.',
                     },
                     {
-                      q: 'Есть ли обучение для команды?',
-                      a: 'Да. Мы предоставляем краткие инструкции для офиса и прорабов, а также можем провести онлайн-сессию по запуску и первым шагам в системе.',
-                    },
-                    {
-                      q: 'Можно ли отказаться после тестового периода?',
-                      a: 'Да. Тестовый период не обязывает вас к оплате. Если вы поймёте, что пока не готовы, вы можете выгрузить свои данные и вернуться позже.',
+                      q: 'Что если не подойдёт после теста?',
+                      a: '14 дней бесплатно, без карты. Не понравится — просто не продлеваете. Данные можно выгрузить.',
                     },
                   ].map((item, index) => (
                     <Accordion
@@ -1024,10 +808,9 @@ const Landing: React.FC = () => {
                       <AccordionSummary
                         expandIcon={<ExpandMoreIcon />}
                         sx={{
-                          px: 2,
-                          '& .MuiAccordionSummary-content': {
-                            my: 1,
-                          },
+                          px: { xs: 2, sm: 2 },
+                          minHeight: { xs: 52 },
+                          '& .MuiAccordionSummary-content': { my: 1.5 },
                         }}
                       >
                         <Typography variant="subtitle2">
@@ -1052,8 +835,8 @@ const Landing: React.FC = () => {
         </Box>
 
         {/* ФИНАЛЬНЫЙ CTA */}
-        <Box component="section" sx={{ py: { xs: 6, md: 8 } }}>
-          <Container maxWidth="lg">
+        <Box component="section" sx={{ py: SECTION_PY }}>
+          <Container maxWidth="lg" sx={{ px: CONTAINER_PX }}>
             <Card
               elevation={4}
               sx={{
@@ -1074,28 +857,14 @@ const Landing: React.FC = () => {
                       component="h2"
                       sx={{ fontWeight: 700, mb: 1 }}
                     >
-                      Начните контролировать прибыль уже сегодня
+                      Перестаньте терять на перерасходе — начните с одного объекта
                     </Typography>
-                    <Typography
-                      variant="body2"
-                      sx={{ opacity: 0.9, maxWidth: 460, mb: 3 }}
-                    >
-                      Подключите Toratau, чтобы видеть реальные деньги по
-                      каждому объекту, управлять выплатами бригадам и
-                      принимать решения на основании цифр, а не ощущений.
-                    </Typography>
-                    <Stack
-                      direction={{ xs: 'column', sm: 'row' }}
-                      spacing={2}
-                    >
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 2 }}>
                       <Button
                         variant="contained"
                         color="inherit"
                         href="/register"
-                        sx={{
-                          color: 'primary.main',
-                          fontWeight: 600,
-                        }}
+                        sx={{ color: 'primary.main', fontWeight: 600, minHeight: { xs: 48 } }}
                       >
                         Создать портал бесплатно
                       </Button>
@@ -1103,10 +872,7 @@ const Landing: React.FC = () => {
                         variant="outlined"
                         color="inherit"
                         href="/login"
-                        sx={{
-                          borderColor: 'rgba(255,255,255,0.6)',
-                          color: 'inherit',
-                        }}
+                        sx={{ borderColor: 'rgba(255,255,255,0.6)', color: 'inherit', minHeight: { xs: 48 } }}
                       >
                         Войти
                       </Button>
@@ -1115,7 +881,7 @@ const Landing: React.FC = () => {
                       variant="caption"
                       sx={{ mt: 2, display: 'block', opacity: 0.8 }}
                     >
-                      14 дней бесплатно. Без обязательств и привязки карты.
+                      Без обязательств. Откажетесь — просто не продлеваете.
                     </Typography>
                   </Box>
                 </Grid>
@@ -1229,12 +995,9 @@ const Landing: React.FC = () => {
       {/* Footer */}
       <Box
         component="footer"
-        sx={{
-          borderTop: `1px solid ${theme.palette.divider}`,
-          py: 2,
-        }}
+        sx={{ borderTop: `1px solid ${theme.palette.divider}`, py: 2 }}
       >
-        <Container maxWidth="lg">
+        <Container maxWidth="lg" sx={{ px: CONTAINER_PX }}>
           <Stack
             direction={{ xs: 'column', sm: 'row' }}
             spacing={1}
@@ -1245,7 +1008,7 @@ const Landing: React.FC = () => {
               © {new Date().getFullYear()} Toratau. Все права защищены.
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Сервис для контроля денег и бригад в строительстве.
+              Сервис для управления объектами в строительстве.
             </Typography>
           </Stack>
         </Container>

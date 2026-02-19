@@ -23,6 +23,8 @@ function makeSub(overrides: Partial<Subscription> = {}): Subscription {
     userId: 1,
     status: 'trial',
     plan: null,
+    planTier: null,
+    planInterval: null,
     currentPeriodStart: now,
     currentPeriodEnd: future,
     trialEndsAt: future,
@@ -92,7 +94,7 @@ describe('checkAndTransition', () => {
 
   it('changes active → expiring when ≤7 days remain', () => {
     const soon = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
-    const sub = makeSub({ status: 'active', plan: 'monthly', currentPeriodEnd: soon });
+    const sub = makeSub({ status: 'active', plan: 'monthly', planTier: 'business', planInterval: 'monthly', currentPeriodEnd: soon });
     const result = checkAndTransition(sub);
     expect(result.status).toBe('expiring');
   });
@@ -117,7 +119,7 @@ describe('transition - PAYMENT_INITIATED', () => {
   statuses.forEach((status) => {
     it(`allows payment initiation from ${status}`, () => {
       const sub = makeSub({ status });
-      const result = transition(sub, { type: 'PAYMENT_INITIATED', plan: 'monthly' });
+      const result = transition(sub, { type: 'PAYMENT_INITIATED', planTier: 'business', planInterval: 'monthly' });
       expect(result).not.toBeNull();
       expect(result!.status).toBe('pending_payment');
       expect(result!.previousStatus).toBe(status);
@@ -126,7 +128,7 @@ describe('transition - PAYMENT_INITIATED', () => {
 
   it('rejects payment initiation from pending_payment', () => {
     const sub = makeSub({ status: 'pending_payment' });
-    const result = transition(sub, { type: 'PAYMENT_INITIATED', plan: 'monthly' });
+    const result = transition(sub, { type: 'PAYMENT_INITIATED', planTier: 'business', planInterval: 'monthly' });
     expect(result).toBeNull();
   });
 });
@@ -134,25 +136,28 @@ describe('transition - PAYMENT_INITIATED', () => {
 describe('transition - PAYMENT_SUCCESS', () => {
   it('activates subscription from pending_payment', () => {
     const sub = makeSub({ status: 'pending_payment', previousStatus: 'expired' });
-    const result = transition(sub, { type: 'PAYMENT_SUCCESS', plan: 'monthly' });
+    const result = transition(sub, { type: 'PAYMENT_SUCCESS', planTier: 'business', planInterval: 'monthly' });
     expect(result).not.toBeNull();
     expect(result!.status).toBe('active');
     expect(result!.plan).toBe('monthly');
+    expect(result!.planTier).toBe('business');
+    expect(result!.planInterval).toBe('monthly');
     expect(result!.blockedAt).toBeNull();
     expect(result!.blockedReason).toBeNull();
   });
 
   it('activates from expired directly', () => {
     const sub = makeExpiredSub();
-    const result = transition(sub, { type: 'PAYMENT_SUCCESS', plan: 'yearly' });
+    const result = transition(sub, { type: 'PAYMENT_SUCCESS', planTier: 'premium', planInterval: 'yearly' });
     expect(result).not.toBeNull();
     expect(result!.status).toBe('active');
     expect(result!.plan).toBe('yearly');
+    expect(result!.planTier).toBe('premium');
   });
 
   it('extends from expiring (adds to remaining period)', () => {
     const sub = makeExpiringSub();
-    const result = transition(sub, { type: 'PAYMENT_SUCCESS', plan: 'monthly' });
+    const result = transition(sub, { type: 'PAYMENT_SUCCESS', planTier: 'start', planInterval: 'monthly' });
     expect(result).not.toBeNull();
     expect(result!.status).toBe('active');
     const days = getRemainingDays(result!);
@@ -160,14 +165,15 @@ describe('transition - PAYMENT_SUCCESS', () => {
   });
 
   it('allows plan change (monthly → yearly)', () => {
-    const sub = makeSub({ status: 'expiring', plan: 'monthly' });
-    const result = transition(sub, { type: 'PAYMENT_SUCCESS', plan: 'yearly' });
+    const sub = makeSub({ status: 'expiring', plan: 'monthly', planTier: 'business', planInterval: 'monthly' });
+    const result = transition(sub, { type: 'PAYMENT_SUCCESS', planTier: 'business', planInterval: 'yearly' });
     expect(result!.plan).toBe('yearly');
+    expect(result!.planInterval).toBe('yearly');
   });
 
   it('rejects payment success from active (not in allowed states)', () => {
     const sub = makeSub({ status: 'active' });
-    const result = transition(sub, { type: 'PAYMENT_SUCCESS', plan: 'monthly' });
+    const result = transition(sub, { type: 'PAYMENT_SUCCESS', planTier: 'business', planInterval: 'monthly' });
     expect(result).toBeNull();
   });
 });

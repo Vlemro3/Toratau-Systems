@@ -6,7 +6,7 @@
  * (заменяет cron — проверка при обращении к порталу).
  */
 import { createContext, useState, useEffect, useCallback, useContext, type ReactNode } from 'react';
-import type { Subscription, BillingPlan, Invoice } from './billingTypes';
+import type { Subscription, BillingPlan, Invoice, PlanTier } from './billingTypes';
 import { isAccessAllowed, shouldShowWarning, getRemainingDays } from './subscriptionMachine';
 import * as billingApi from '../api/billing';
 import { useAuth } from '../hooks/useAuth';
@@ -23,8 +23,8 @@ interface SubscriptionContextType {
   remainingDays: number;
   /** Идёт ли операция оплаты */
   paying: boolean;
-  /** Подписаться на план */
-  subscribe: (plan: BillingPlan) => Promise<Invoice | null>;
+  /** Подписаться на тариф и интервал */
+  subscribe: (planTier: PlanTier, planInterval: BillingPlan) => Promise<Invoice | null>;
   /** Симулировать успешную оплату */
   simulateSuccess: (invoiceId: number) => Promise<void>;
   /** Симулировать неудачную оплату */
@@ -41,7 +41,7 @@ const SubscriptionContext = createContext<SubscriptionContextType>({
   showWarning: false,
   remainingDays: 0,
   paying: false,
-  subscribe: async () => null,
+  subscribe: async (): Promise<Invoice | null> => null,
   simulateSuccess: async () => {},
   simulateFail: async () => {},
   refresh: async () => {},
@@ -77,11 +77,11 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     fetchSubscription();
   }, [fetchSubscription]);
 
-  const subscribeToPlan = useCallback(async (plan: BillingPlan): Promise<Invoice | null> => {
+  const subscribeToPlan = useCallback(async (planTier: PlanTier, planInterval: BillingPlan): Promise<Invoice | null> => {
     if (paying) return null;
     setPaying(true);
     try {
-      const result = await billingApi.subscribe(plan);
+      const result = await billingApi.subscribe(planTier, planInterval);
       setSubscription(result.subscription);
 
       const payResult = await billingApi.simulatePaymentSuccess(result.invoice.id);

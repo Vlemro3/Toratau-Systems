@@ -8,6 +8,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getProjects } from '../api/projects';
 import { useAuth } from '../hooks/useAuth';
+import { useSubscription } from '../billing/SubscriptionContext';
+import { canAddProject } from '../billing/billingConfig';
 import { PROJECT_STATUS_LABELS, PROJECT_STATUS_COLORS } from '../utils/constants';
 import type { Project, ProjectStatus } from '../types';
 
@@ -21,11 +23,13 @@ export function ProjectSelector() {
   const navigate = useNavigate();
   const location = useLocation();
   const { isAdmin } = useAuth();
+  const { subscription } = useSubscription();
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -74,6 +78,10 @@ export function ProjectSelector() {
   const goCreateProject = () => {
     setOpen(false);
     setSearch('');
+    if (!canAddProject(subscription, projects.length)) {
+      setShowUpgradeModal(true);
+      return;
+    }
     navigate('/projects/new');
   };
 
@@ -173,6 +181,27 @@ export function ProjectSelector() {
               + Создать объект
             </button>
           )}
+        </div>
+      )}
+
+      {showUpgradeModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div className="card" style={{ maxWidth: 400, margin: 16 }}>
+            <div className="card__body">
+              <h3 style={{ marginTop: 0 }}>Достигнут лимит объектов</h3>
+              <p className="text-muted">
+                По вашему тарифу нельзя добавить больше объектов. Смените тариф в разделе «Оплата и подписка».
+              </p>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+                <button type="button" className="btn btn--secondary" onClick={() => setShowUpgradeModal(false)}>
+                  Закрыть
+                </button>
+                <button type="button" className="btn btn--primary" onClick={() => { setShowUpgradeModal(false); navigate('/billing'); }}>
+                  Перейти к тарифам
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

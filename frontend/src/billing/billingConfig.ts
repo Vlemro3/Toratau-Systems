@@ -1,16 +1,15 @@
 /**
  * Централизованная конфигурация тарифов и параметров подписки.
- *
- * Все цены, сроки и пороги вынесены сюда, чтобы при подключении
- * реального платёжного шлюза менять только этот файл.
  */
-import type { BillingPlan } from './billingTypes';
+import type { PlanTier, BillingPlan } from './billingTypes';
+import type { Subscription } from './billingTypes';
 
-export interface PlanConfig {
+export interface TariffTierConfig {
   readonly label: string;
-  readonly price: number;
-  readonly durationDays: number;
-  readonly discountPercent: number;
+  readonly priceMonthly: number;
+  /** null = без ограничений */
+  readonly objectLimit: number | null;
+  readonly highlighted?: boolean;
 }
 
 export const BILLING_CONFIG = {
@@ -18,42 +17,83 @@ export const BILLING_CONFIG = {
     durationDays: 14,
   },
 
-  plans: {
-    monthly: {
-      label: 'Месяц',
-      price: 5_000,
-      durationDays: 30,
-      discountPercent: 0,
+  /** Тарифные уровни: лимит объектов и цена за месяц */
+  tiers: {
+    start: {
+      label: 'Start',
+      priceMonthly: 1_500,
+      objectLimit: 3,
+      highlighted: false,
     },
-    yearly: {
-      label: 'Год',
-      price: 54_000,
-      durationDays: 365,
-      discountPercent: 10,
+    business: {
+      label: 'Business',
+      priceMonthly: 3_000,
+      objectLimit: 6,
+      highlighted: true,
     },
-  } as Record<BillingPlan, PlanConfig>,
+    premium: {
+      label: 'Premium',
+      priceMonthly: 5_000,
+      objectLimit: 10,
+      highlighted: false,
+    },
+    unlim: {
+      label: 'Unlim',
+      priceMonthly: 10_000,
+      objectLimit: null,
+      highlighted: false,
+    },
+  } as Record<PlanTier, TariffTierConfig>,
 
-  /** За сколько дней до окончания показывать предупреждение */
+  /** Скидка при оплате за год (0.1 = 10%) */
+  yearlyDiscountPercent: 10,
+
   expiringThresholdDays: 7,
-
-  /** Валюта для отображения */
   currency: '₽',
-
-  /** Базовая месячная цена (для расчёта скидки в UI) */
-  baseMonthlyPrice: 5_000,
 } as const;
 
 /**
- * Форматирование суммы в рублях: 5 000 ₽
+ * Лимит объектов по подписке. null = без ограничений.
  */
+export function getObjectLimit(subscription: Subscription | null): number | null {
+  if (!subscription?.planTier) return null;
+  return BILLING_CONFIG.tiers[subscription.planTier].objectLimit;
+}
+
+/**
+ * Проверка: можно ли создать ещё один объект.
+ */
+export function canAddProject(subscription: Subscription | null, currentProjectCount: number): boolean {
+  const limit = getObjectLimit(subscription);
+  if (limit === null) return true;
+  return currentProjectCount < limit;
+}
+
 export function formatPrice(amount: number): string {
   return amount.toLocaleString('ru-RU') + ' ' + BILLING_CONFIG.currency;
 }
 
 /**
- * Расчёт экономии при годовом плане по сравнению с помесячной оплатой
+ * Цена за месяц при выборе тарифа и интервала.
  */
-export function calcYearlySavings(): number {
-  const monthlyTotal = BILLING_CONFIG.plans.monthly.price * 12;
-  return monthlyTotal - BILLING_CONFIG.plans.yearly.price;
+export function getTierPriceMonthly(planTier: PlanTier): number {
+  return BILLING_CONFIG.tiers[planTier].priceMonthly;
+}
+
+/**
+ * Сумма к оплате: за месяц или за год со скидкой.
+ */
+export function getInvoiceAmount(planTier: PlanTier, planInterval: BillingPlan): number {
+  const monthly = BILLING_CONFIG.tiers[planTier].priceMonthly;
+  if (planInterval === 'monthly') return monthly;
+  const yearly = monthly * 12 * (1 - BILLING_CONFIG.yearlyDiscountPercent / 100);
+  return Math.round(yearly);
+}
+
+/**
+ * Экономия при оплате за год (в рублях).
+ */
+export function calcYearlySavings(planTier: PlanTier): number {
+  const monthly = BILLING_CONFIG.tiers[planTier].priceMonthly;
+  return monthly * 12 - getInvoiceAmount(planTier, 'yearly');
 }

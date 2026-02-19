@@ -35,6 +35,20 @@ export function cleanupRemovedDocTemplates(): void {
   REMOVED_DOC_TYPE_IDS.forEach((id) => removeStoredTemplate(id));
 }
 
+/**
+ * Загрузка системного шаблона из папки public/templates/
+ * Возвращает ArrayBuffer или null, если файл не найден
+ */
+export async function getSystemTemplate(docType: string): Promise<ArrayBuffer | null> {
+  try {
+    const response = await fetch(`/templates/${docType}.docx`);
+    if (!response.ok) return null;
+    return await response.arrayBuffer();
+  } catch {
+    return null;
+  }
+}
+
 export function getStoredTemplate(docType: string): string | null {
   try {
     return localStorage.getItem(STORAGE_PREFIX + docType);

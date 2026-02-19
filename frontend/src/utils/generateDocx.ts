@@ -7,7 +7,8 @@ import Docxtemplater from 'docxtemplater';
 import { saveAs } from 'file-saver';
 import type { CpDocument, Counterparty, Organization } from '../types';
 import { getDocType } from './documentTypes';
-import { getStoredTemplate, base64ToArrayBuffer } from './documentTemplates';
+import { getStoredTemplate, getSystemTemplate, base64ToArrayBuffer } from './documentTemplates';
+import { numberToWords } from './format';
 
 const THIN_BORDER = { style: BorderStyle.SINGLE, size: 1, color: '000000' };
 const CELL_BORDERS = { top: THIN_BORDER, bottom: THIN_BORDER, left: THIN_BORDER, right: THIN_BORDER };
@@ -38,15 +39,15 @@ function buildItemsTable(doc: CpDocument): Table {
     ],
   });
 
-  const dataRows = doc.items.map((item, i) =>
+  const dataRows = (doc.items || []).map((item, i) =>
     new TableRow({
       children: [
         makeCell(String(i + 1), false, 600),
-        makeCell(item.name, false, 4000),
-        makeCell(item.unit, false, 1000),
-        makeCell(String(item.qty), false, 1000),
-        makeCell(fmtMoney(item.price), false, 1400),
-        makeCell(fmtMoney(item.qty * item.price), false, 1400),
+        makeCell(item.name || '', false, 4000),
+        makeCell(item.unit || '', false, 1000),
+        makeCell(String(item.qty || 0), false, 1000),
+        makeCell(fmtMoney(Number(item.price) || 0), false, 1400),
+        makeCell(fmtMoney((Number(item.qty) || 0) * (Number(item.price) || 0)), false, 1400),
       ],
     })
   );
@@ -104,23 +105,94 @@ function buildTemplateData(
   dateStr: string,
   investor?: Counterparty | null,
 ) {
-  const items = doc.items.map((item, i) => ({
-    n: i + 1,
-    name: item.name,
-    unit: item.unit,
-    qty: item.qty,
-    price: fmtMoney(item.price),
-    sum: fmtMoney(item.qty * item.price),
-    code: item.code ?? '',
-    okei_code: item.okei_code ?? '',
-    packaging_type: item.packaging_type ?? '',
-    packaging_qty: item.packaging_qty ?? '',
-    places_count: item.places_count ?? '',
-    mass_kg: item.mass_kg ?? '',
-    cost_from_start: item.cost_from_start ? fmtMoney(item.cost_from_start) : '',
-    cost_from_year_start: item.cost_from_year_start ? fmtMoney(item.cost_from_year_start) : '',
-    cost_for_period: item.cost_for_period ? fmtMoney(item.cost_for_period) : '',
-  }));
+  // Обработка позиций документа с защитой от undefined/null
+  const items = (doc.items || []).map((item, i) => {
+    const qty = Number(item.qty) || 0;
+    const price = Number(item.price) || 0;
+    return {
+      n: String(i + 1),
+      name: String(item.name || ''),
+      unit: String(item.unit || ''),
+      qty: String(qty),
+      price: fmtMoney(price),
+      sum: fmtMoney(qty * price),
+      code: String(item.code ?? ''),
+      okei_code: String(item.okei_code ?? ''),
+      packaging_type: String(item.packaging_type ?? ''),
+      packaging_qty: String(item.packaging_qty ?? ''),
+      places_count: String(item.places_count ?? ''),
+      mass_kg: String(item.mass_kg ?? ''),
+      cost_from_start: item.cost_from_start ? fmtMoney(item.cost_from_start) : '',
+      cost_from_year_start: item.cost_from_year_start ? fmtMoney(item.cost_from_year_start) : '',
+      cost_for_period: item.cost_for_period ? fmtMoney(item.cost_for_period) : '',
+    };
+  });
+
+  // Расчет итогов с учетом налогообложения
+  const calculateTotals = () => {
+    const itemsTotal = (doc.items || []).reduce((s, i) => {
+      if (doc.doc_type === 'ks3' && i.cost_for_period !== undefined) {
+        return s + (Number(i.cost_for_period) || 0);
+      }
+      const qty = Number(i.qty) || 0;
+      const price = Number(i.price) || 0;
+      return s + qty * price;
+    }, 0);
+
+    if (!doc.taxation || doc.taxation === 'no_vat' || doc.doc_type !== 'payment_invoice') {
+      return {
+        totalWithoutVat: itemsTotal,
+        totalVat: 0,
+        totalWithVat: itemsTotal,
+      };
+    }
+
+    let vatRate = 0;
+    if (doc.taxation === 'vat_20') vatRate = 0.20;
+    else if (doc.taxation === 'vat_10') vatRate = 0.10;
+    else if (doc.taxation === 'vat_0') vatRate = 0;
+    else if (doc.taxation === 'vat_included') {
+      // НДС уже включен в сумму
+      const totalWithVat = itemsTotal;
+      const totalWithoutVat = totalWithVat / 1.20; // предполагаем 20%
+      const totalVat = totalWithVat - totalWithoutVat;
+      return {
+        totalWithoutVat: isNaN(totalWithoutVat) || !isFinite(totalWithoutVat) ? 0 : totalWithoutVat,
+        totalVat: isNaN(totalVat) || !isFinite(totalVat) ? 0 : totalVat,
+        totalWithVat: isNaN(totalWithVat) || !isFinite(totalWithVat) ? 0 : totalWithVat,
+      };
+    } else if (doc.taxation === 'vat_on_top') {
+      // НДС сверху
+      const totalWithoutVat = itemsTotal;
+      const totalVat = totalWithoutVat * 0.20; // предполагаем 20%
+      const totalWithVat = totalWithoutVat + totalVat;
+      return {
+        totalWithoutVat: isNaN(totalWithoutVat) || !isFinite(totalWithoutVat) ? 0 : totalWithoutVat,
+        totalVat: isNaN(totalVat) || !isFinite(totalVat) ? 0 : totalVat,
+        totalWithVat: isNaN(totalWithVat) || !isFinite(totalWithVat) ? 0 : totalWithVat,
+      };
+    }
+
+    if (vatRate > 0) {
+      const totalWithoutVat = itemsTotal;
+      const totalVat = totalWithoutVat * vatRate;
+      const totalWithVat = totalWithoutVat + totalVat;
+      return {
+        totalWithoutVat: isNaN(totalWithoutVat) || !isFinite(totalWithoutVat) ? 0 : totalWithoutVat,
+        totalVat: isNaN(totalVat) || !isFinite(totalVat) ? 0 : totalVat,
+        totalWithVat: isNaN(totalWithVat) || !isFinite(totalWithVat) ? 0 : totalWithVat,
+      };
+    }
+
+    return {
+      totalWithoutVat: isNaN(itemsTotal) || !isFinite(itemsTotal) ? 0 : itemsTotal,
+      totalVat: 0,
+      totalWithVat: isNaN(itemsTotal) || !isFinite(itemsTotal) ? 0 : itemsTotal,
+    };
+  };
+
+  const totals = calculateTotals();
+
   return {
     doc_number: doc.number || '___',
     date: dateStr,
@@ -131,6 +203,7 @@ function buildTemplateData(
     seller_bank: organization?.bank_account ?? '',
     seller_bik: organization?.bik ?? '',
     seller_bank_name: organization?.bank_name ?? '',
+    seller_corr_account: organization?.corr_account ?? '',
     seller_director: organization?.director_title && organization?.director_name ? `${organization.director_title} ${organization.director_name}` : '',
     buyer_name: counterparty.name,
     buyer_inn: counterparty.inn ?? '',
@@ -139,6 +212,7 @@ function buildTemplateData(
     buyer_bank: counterparty.bank_account ?? '',
     buyer_bik: counterparty.bik ?? '',
     buyer_bank_name: counterparty.bank_name ?? '',
+    buyer_corr_account: counterparty.corr_account ?? '',
     buyer_director: counterparty.director_title && counterparty.director_name ? `${counterparty.director_title} ${counterparty.director_name}` : '',
     investor_name: investor?.name ?? '',
     investor_inn: investor?.inn ?? '',
@@ -147,6 +221,10 @@ function buildTemplateData(
     basis: doc.basis ?? '',
     items,
     total: fmtMoney(doc.total),
+    total_without_vat: fmtMoney(totals.totalWithoutVat),
+    total_vat: fmtMoney(totals.totalVat),
+    total_with_vat: fmtMoney(totals.totalWithVat),
+    total_in_words: numberToWords(totals.totalWithVat),
     notes: doc.notes ?? '',
     taxation: getTaxationLabel(doc.taxation),
     construction_name: doc.construction_name ?? '',
@@ -226,6 +304,7 @@ export async function generateAndDownloadDocx(
   const dateStr = new Date(doc.date).toLocaleDateString('ru-RU');
   const fileName = `${docName} №${doc.number || '___'} от ${dateStr}.docx`.replace(/[/\\:*?"<>|]/g, '_');
 
+  // Приоритет 1: Пользовательский шаблон из localStorage (загружен через UI)
   const customTemplateBase64 = getStoredTemplate(doc.doc_type);
   if (customTemplateBase64) {
     try {
@@ -244,7 +323,51 @@ export async function generateAndDownloadDocx(
       saveAs(blob as Blob, fileName);
       return;
     } catch (err) {
-      console.warn('Ошибка при заполнении загруженного шаблона, используется стандартная генерация:', err);
+      console.warn('Ошибка при заполнении пользовательского шаблона, пробуем системный:', err);
+    }
+  }
+
+  // Приоритет 2: Системный шаблон из public/templates/{docType}.docx
+  const systemTemplateBuffer = await getSystemTemplate(doc.doc_type);
+  if (systemTemplateBuffer) {
+    try {
+      const zip = new PizZip(systemTemplateBuffer);
+      const docxtemplater = new Docxtemplater(zip, {
+        paragraphLoop: true,
+        linebreaks: true,
+      });
+      const data = buildTemplateData(doc, counterparty, organization ?? null, dateStr, investor ?? null);
+      if (doc.doc_type === 'payment_invoice') {
+        console.log('Template data for payment_invoice:', {
+          itemsCount: data.items.length,
+          firstItem: data.items[0],
+          allItems: data.items,
+          totals: {
+            total: data.total,
+            total_without_vat: data.total_without_vat,
+            total_vat: data.total_vat,
+            total_with_vat: data.total_with_vat,
+            total_in_words: data.total_in_words,
+          },
+        });
+      }
+      try {
+        docxtemplater.render(data);
+      } catch (renderError) {
+        console.error('Ошибка при рендеринге шаблона:', renderError);
+        throw renderError;
+      }
+      const blob = docxtemplater.getZip().generate({
+        type: 'blob',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      });
+      saveAs(blob as Blob, fileName);
+      return;
+    } catch (err) {
+      console.warn('Ошибка при заполнении системного шаблона, используется программная генерация:', err);
+      if (err instanceof Error) {
+        console.error('Детали ошибки:', err.message, err.stack);
+      }
     }
   }
 
@@ -334,7 +457,7 @@ export async function generateAndDownloadDocx(
 
   const children: (Paragraph | Table)[] = [...sections];
 
-  if (doc.items.length > 0) {
+  if ((doc.items || []).length > 0) {
     children.push(buildItemsTable(doc));
     children.push(p(''));
     children.push(p(`Итого: ${fmtMoney(doc.total)} руб.`, { bold: true }));

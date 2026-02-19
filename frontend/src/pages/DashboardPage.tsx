@@ -3,10 +3,12 @@
  * По умолчанию только активные и новые; архивные — в сворачиваемом блоке.
  */
 import { useEffect, useState, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { getProjects } from '../api/projects';
 import { getProjectReport } from '../api/reports';
 import { useAuth } from '../hooks/useAuth';
+import { useSubscription } from '../billing/SubscriptionContext';
+import { canAddProject } from '../billing/billingConfig';
 import { StatusBadge } from '../components/StatusBadge';
 import { RiskIndicator } from '../components/RiskIndicator';
 import { LoadingSpinner } from '../components/LoadingSpinner';
@@ -34,12 +36,14 @@ function matchSearch(project: Project, q: string) {
 
 export function DashboardPage() {
   const { isAdmin } = useAuth();
+  const { subscription } = useSubscription();
   const navigate = useNavigate();
   const [items, setItems] = useState<ProjectWithMetrics[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | ''>('');
   const [showArchive, setShowArchive] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -87,11 +91,42 @@ export function DashboardPage() {
       <div className="page__header">
         <h2 className="page__title">Объекты</h2>
         {isAdmin && (
-          <Link to="/projects/new" className="btn btn--primary">
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => {
+              if (!canAddProject(subscription, items.length)) {
+                setShowUpgradeModal(true);
+              } else {
+                navigate('/projects/new');
+              }
+            }}
+          >
             + Новый объект
-          </Link>
+          </button>
         )}
       </div>
+
+      {showUpgradeModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div className="card" style={{ maxWidth: 400, margin: 16 }}>
+            <div className="card__body">
+              <h3 style={{ marginTop: 0 }}>Достигнут лимит объектов</h3>
+              <p className="text-muted">
+                По вашему тарифу нельзя добавить больше объектов. Смените тариф в разделе «Оплата и подписка».
+              </p>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+                <button type="button" className="btn btn--secondary" onClick={() => setShowUpgradeModal(false)}>
+                  Закрыть
+                </button>
+                <button type="button" className="btn btn--primary" onClick={() => { setShowUpgradeModal(false); navigate('/billing'); }}>
+                  Перейти к тарифам
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Фильтры */}
       <div className="filters">

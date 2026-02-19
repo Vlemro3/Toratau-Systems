@@ -49,13 +49,18 @@ export const PAYOUT_STATUS_COLORS: Record<PayoutStatus, string> = {
   cancelled: '#dc2626',
 };
 
-/** Категории расходов */
+/** Встроенные категории расходов */
 export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   materials: 'Материалы',
   tools: 'Инструмент',
   transport: 'Транспорт',
   other: 'Прочее',
 };
+
+/** Подпись категории: встроенная или пользовательское название как есть */
+export function getExpenseCategoryLabel(category: string): string {
+  return (EXPENSE_CATEGORY_LABELS as Record<string, string>)[category] ?? category;
+}
 
 /** Способы оплаты */
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {

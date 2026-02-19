@@ -19,6 +19,10 @@ export type SubscriptionStatus =
   | 'blocked'
   | 'pending_payment';
 
+/** Тарифный план по уровню (лимит объектов и цена) */
+export type PlanTier = 'start' | 'business' | 'premium' | 'unlim';
+
+/** Интервал оплаты */
 export type BillingPlan = 'monthly' | 'yearly';
 
 export type InvoiceStatus = 'pending' | 'paid' | 'failed' | 'cancelled';
@@ -27,14 +31,18 @@ export interface Subscription {
   id: number;
   userId: number;
   status: SubscriptionStatus;
+  /** @deprecated используется planTier + planInterval */
   plan: BillingPlan | null;
+  /** Тарифный уровень (лимит объектов) */
+  planTier: PlanTier | null;
+  /** Интервал оплаты при последней оплате */
+  planInterval: BillingPlan | null;
   currentPeriodStart: string;
   currentPeriodEnd: string;
   trialEndsAt: string | null;
   cancelledAt: string | null;
   blockedAt: string | null;
   blockedReason: string | null;
-  /** Статус до pending_payment — для отката при неудаче */
   previousStatus: SubscriptionStatus | null;
   createdAt: string;
   updatedAt: string;
@@ -45,6 +53,7 @@ export interface Invoice {
   subscriptionId: number;
   amount: number;
   plan: BillingPlan;
+  planTier: PlanTier;
   status: InvoiceStatus;
   createdAt: string;
   paidAt: string | null;
@@ -61,7 +70,8 @@ export interface PaymentLog {
 }
 
 export interface SubscribeRequest {
-  plan: BillingPlan;
+  planTier: PlanTier;
+  planInterval: BillingPlan;
 }
 
 export interface SubscriptionInfo {

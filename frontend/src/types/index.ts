@@ -14,7 +14,7 @@ export type WorkLogStatus = 'draft' | 'pending' | 'approved' | 'rejected';
 /** Статусы выплаты бригаде */
 export type PayoutStatus = 'created' | 'approved' | 'cancelled';
 
-/** Категории расходов */
+/** Встроенные категории расходов; допускаются и пользовательские (строка — название) */
 export type ExpenseCategory = 'materials' | 'tools' | 'transport' | 'other';
 
 /** Способы оплаты */
@@ -27,6 +27,8 @@ export interface User {
   full_name: string;
   role: UserRole;
   is_active: boolean;
+  /** Идентификатор портала (для мультитенантности; при регистрации создаётся свой портал) */
+  portal_id?: string;
 }
 
 /* ---- Объект (проект) ---- */
@@ -43,6 +45,8 @@ export interface Project {
   notes: string;
   created_at: string;
   updated_at: string;
+  /** Идентификатор портала (данные изолированы по порталу) */
+  portal_id?: string;
 }
 
 export interface ProjectCreate {
@@ -104,12 +108,14 @@ export interface WorkLog {
   comment: string;
   photos: string[];
   created_by: number;
+  updated_by?: number | null;
   status: WorkLogStatus;
   accrued_amount: number;
   project?: Project;
   crew?: Crew;
   work_type?: WorkType;
   creator?: User;
+  updated_by_user?: User;
 }
 
 export interface WorkLogCreate {
@@ -132,7 +138,9 @@ export interface CashIn {
   comment: string;
   file_url: string | null;
   created_by: number;
+  updated_by?: number | null;
   creator?: User;
+  updated_by_user?: User;
 }
 
 export interface CashInCreate {
@@ -148,18 +156,21 @@ export interface Expense {
   project_id: number;
   date: string;
   amount: number;
-  category: ExpenseCategory;
+  /** Встроенный ключ (materials/tools/transport/other) или пользовательское название */
+  category: string;
   comment: string;
   file_url: string | null;
   created_by: number;
+  updated_by?: number | null;
   creator?: User;
+  updated_by_user?: User;
 }
 
 export interface ExpenseCreate {
   project_id: number;
   date: string;
   amount: number;
-  category: ExpenseCategory;
+  category: string;
   comment?: string;
 }
 
@@ -174,9 +185,11 @@ export interface Payout {
   comment: string;
   status: PayoutStatus;
   created_by: number;
+  updated_by?: number | null;
   approved_by: number | null;
   crew?: Crew;
   creator?: User;
+  updated_by_user?: User;
 }
 
 export interface PayoutCreate {

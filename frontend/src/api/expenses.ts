@@ -24,3 +24,13 @@ export async function updateExpense(id: number, data: Partial<ExpenseCreate>): P
 export async function deleteExpense(id: number): Promise<void> {
   return api.delete(`/expenses/${id}`);
 }
+
+/** Список пользовательских категорий расходов (для текущего портала) */
+export async function getCustomExpenseCategories(): Promise<string[]> {
+  return api.get<string[]>('/expense-categories');
+}
+
+/** Добавить пользовательскую категорию расходов */
+export async function addCustomExpenseCategory(name: string): Promise<string[]> {
+  return api.post<string[]>('/expense-categories', { name: name.trim() });
+}

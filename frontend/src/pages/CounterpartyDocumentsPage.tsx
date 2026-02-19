@@ -6,6 +6,7 @@ import { getOrganization } from '../api/organizations';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { getDocType, DOCUMENT_TYPES, DOC_CATEGORIES } from '../utils/documentTypes';
 import { generateAndDownloadDocx } from '../utils/generateDocx';
+import { formatDate } from '../utils/format';
 import type { Counterparty, CpDocument } from '../types';
 
 export function CounterpartyDocumentsPage() {
@@ -36,6 +37,20 @@ export function CounterpartyDocumentsPage() {
   }, [cpId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Обработка ESC для закрытия модального окна и блокировка скролла
+  useEffect(() => {
+    if (!showPicker) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowPicker(false);
+    };
+    document.addEventListener('keydown', handleEsc);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', handleEsc);
+      document.body.style.overflow = '';
+    };
+  }, [showPicker]);
 
   const handleDelete = async (id: number) => {
     if (!confirm('Удалить документ?')) return;
@@ -84,13 +99,18 @@ export function CounterpartyDocumentsPage() {
 
       {/* Document type picker */}
       {showPicker && (
-        <div className="modal-overlay" onClick={() => setShowPicker(false)}>
-          <div className="modal modal--lg" onClick={(e) => e.stopPropagation()}>
-            <div className="modal__header">
-              <h3>Выберите тип документа</h3>
-              <button className="modal__close" onClick={() => setShowPicker(false)}>&times;</button>
+        <div className="doc-picker-overlay" onClick={() => setShowPicker(false)}>
+          <div className="doc-picker-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="doc-picker-modal__header">
+              <h3 className="doc-picker-modal__title">Выберите тип документа</h3>
+              <button className="doc-picker-modal__close" onClick={() => setShowPicker(false)} aria-label="Закрыть">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
             </div>
-            <div className="modal__body doc-picker">
+            <div className="doc-picker-modal__body">
               {DOC_CATEGORIES.map((cat) => (
                 <div key={cat} className="doc-picker__group">
                   <h4 className="doc-picker__category">{cat}</h4>
@@ -125,10 +145,10 @@ export function CounterpartyDocumentsPage() {
             <thead>
               <tr>
                 <th>Тип документа</th>
-                <th>Номер</th>
-                <th>Дата</th>
-                <th className="text-right">Сумма</th>
-                <th>Действия</th>
+                <th>НОМЕР</th>
+                <th>ДАТА</th>
+                <th className="text-right">СУММА</th>
+                <th>ДЕЙСТВИЯ</th>
               </tr>
             </thead>
             <tbody>
@@ -136,8 +156,8 @@ export function CounterpartyDocumentsPage() {
                 <tr key={doc.id}>
                   <td><strong>{getDocType(doc.doc_type)?.name || doc.doc_type}</strong></td>
                   <td>{doc.number || '—'}</td>
-                  <td>{new Date(doc.date).toLocaleDateString('ru-RU')}</td>
-                  <td className="text-right">{doc.total > 0 ? doc.total.toLocaleString('ru-RU') + ' ₽' : '—'}</td>
+                  <td>{formatDate(doc.date)}</td>
+                  <td className="text-right">{doc.total > 0 ? doc.total.toLocaleString('ru-RU') + ' Р' : '—'}</td>
                   <td>
                     <div className="table-actions">
                       <Link to={`/counterparties/${cpId}/documents/${doc.id}/edit`} className="table-action table-action--edit" title="Редактировать">

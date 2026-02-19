@@ -16,7 +16,7 @@ import type {
   Counterparty, CounterpartyCreate, CpDocument, CpDocumentCreate,
   Portal, PortalCreate, PortalUpdate,
 } from '../types';
-import type { Subscription, Invoice, PaymentLog, BillingPlan } from '../billing/billingTypes';
+import type { Subscription, Invoice, PaymentLog, BillingPlan, PlanTier } from '../billing/billingTypes';
 import { createTrialSubscription, checkAndTransition, transition } from '../billing/subscriptionMachine';
 import { PaymentService } from '../billing/paymentService';
 
@@ -34,9 +34,11 @@ function delay(ms = 120): Promise<void> {
 /* ================================================================
    Начальные демо-данные
    ================================================================ */
+const DEFAULT_PORTAL_ID = 'default';
+
 const DEMO_USERS: User[] = [
-  { id: 1, username: 'admin', full_name: 'Ахметов Рустам', role: 'admin', is_active: true },
-  { id: 2, username: 'foreman', full_name: 'Сергеев Дмитрий', role: 'foreman', is_active: true },
+  { id: 1, username: 'admin', full_name: 'Ахметов Рустам', role: 'admin', is_active: true, portal_id: DEFAULT_PORTAL_ID },
+  { id: 2, username: 'foreman', full_name: 'Сергеев Дмитрий', role: 'foreman', is_active: true, portal_id: DEFAULT_PORTAL_ID },
   { id: 3, username: 'superadmin', full_name: 'Super Admin', role: 'superAdmin', is_active: true },
 ];
 
@@ -45,19 +47,19 @@ const DEMO_PROJECTS: Project[] = [
     id: 1, name: 'ЖК «Солнечный»', address: 'ул. Центральная, 45',
     client: 'ООО «Стройинвест»', start_date: '2025-09-01', end_date: '2026-06-30',
     status: 'in_progress', contract_amount: 5_000_000, planned_cost: 3_800_000,
-    notes: 'Многоквартирный дом, 3 подъезда', created_at: '2025-09-01T10:00:00Z', updated_at: '2026-02-10T14:00:00Z',
+    notes: 'Многоквартирный дом, 3 подъезда', created_at: '2025-09-01T10:00:00Z', updated_at: '2026-02-10T14:00:00Z', portal_id: DEFAULT_PORTAL_ID,
   },
   {
     id: 2, name: 'Офис «Центральный»', address: 'пр. Ленина, 12',
     client: 'ИП Кузнецов', start_date: '2026-02-01', end_date: '2026-05-30',
     status: 'new', contract_amount: 1_200_000, planned_cost: 900_000,
-    notes: '', created_at: '2026-02-01T09:00:00Z', updated_at: '2026-02-01T09:00:00Z',
+    notes: '', created_at: '2026-02-01T09:00:00Z', updated_at: '2026-02-01T09:00:00Z', portal_id: DEFAULT_PORTAL_ID,
   },
   {
     id: 3, name: 'Ремонт школы №5', address: 'ул. Пушкина, 8',
     client: 'Администрация района', start_date: '2025-06-01', end_date: '2025-12-20',
     status: 'completed', contract_amount: 2_500_000, planned_cost: 2_000_000,
-    notes: 'Капитальный ремонт', created_at: '2025-06-01T08:00:00Z', updated_at: '2025-12-20T18:00:00Z',
+    notes: 'Капитальный ремонт', created_at: '2025-06-01T08:00:00Z', updated_at: '2025-12-20T18:00:00Z', portal_id: DEFAULT_PORTAL_ID,
   },
 ];
 
@@ -248,6 +250,10 @@ interface DB {
   paymentLogs: PaymentLog[];
   portals: Portal[];
   currentUserId: number | null;
+  /** Портал текущей сессии (для изоляции данных по порталу) */
+  currentPortalId: string;
+  /** Пользовательские категории расходов по порталам: portalId -> названия */
+  customExpenseCategories: Record<string, string[]>;
 }
 
 function defaultDB(): DB {
@@ -270,6 +276,8 @@ function defaultDB(): DB {
     paymentLogs: [],
     portals: structuredClone(DEMO_PORTALS),
     currentUserId: null,
+    currentPortalId: DEFAULT_PORTAL_ID,
+    customExpenseCategories: {},
   };
 }
 
@@ -308,6 +316,10 @@ class MockStore {
           if (!parsed.invoices) parsed.invoices = [];
           if (!parsed.paymentLogs) parsed.paymentLogs = [];
           if (!parsed.portals) parsed.portals = structuredClone(DEMO_PORTALS);
+          if (parsed.currentPortalId == null) parsed.currentPortalId = DEFAULT_PORTAL_ID;
+          if (typeof parsed.customExpenseCategories !== 'object') parsed.customExpenseCategories = {};
+          parsed.users?.forEach((u: User) => { if (u.portal_id == null && u.role !== 'superAdmin') u.portal_id = DEFAULT_PORTAL_ID; });
+          parsed.projects?.forEach((p: Project) => { if (p.portal_id == null) p.portal_id = DEFAULT_PORTAL_ID; });
           nextId = Math.max(
             nextId,
             ...[
@@ -346,11 +358,74 @@ class MockStore {
       throw new Error('Неверный логин или пароль');
     }
     this.db.currentUserId = user.id;
+    this.db.currentPortalId = user.portal_id ?? DEFAULT_PORTAL_ID;
     this.save();
     return {
       access_token: `mock-token-${user.id}-${Date.now()}`,
       token_type: 'bearer',
       user,
+    };
+  }
+
+  register(data: { username: string; password: string; full_name: string; email: string }): LoginResponse {
+    if (this.db.users.some((u) => u.username === data.username)) {
+      throw new Error('Пользователь с таким логином уже существует');
+    }
+    const now = new Date().toISOString();
+    const userId = genId();
+    const portalId = `portal-${userId}`;
+
+    const portal: Portal = {
+      id: portalId,
+      name: `Портал: ${data.full_name}`,
+      ownerEmail: data.email,
+      createdAt: now,
+      usersCount: 1,
+      subscription: { plan: 'free', isPaid: false, paidUntil: null },
+      status: 'active',
+      limits: { maxUsers: 10, maxStorageMb: 500 },
+    };
+    this.db.portals.push(portal);
+
+    const user: User = {
+      id: userId,
+      username: data.username,
+      full_name: data.full_name,
+      role: 'admin',
+      is_active: true,
+      portal_id: portalId,
+    };
+    this.db.users.push(user);
+    this.db.passwords[data.username] = data.password;
+
+    const demoProject: Project = {
+      id: genId(),
+      name: 'Демонстрационный объект',
+      address: 'Адрес можно изменить в карточке объекта',
+      client: 'Заказчик (демо)',
+      start_date: now.slice(0, 10),
+      end_date: null,
+      status: 'new',
+      contract_amount: 1_000_000,
+      planned_cost: 800_000,
+      notes: 'Этот объект создан для ознакомления с возможностями портала. Добавляйте работы, расходы и выплаты.',
+      created_at: now,
+      updated_at: now,
+      portal_id: portalId,
+    };
+    this.db.projects.push(demoProject);
+
+    const sub = createTrialSubscription(userId, genId());
+    this.db.subscriptions.push(sub);
+
+    this.db.currentUserId = userId;
+    this.db.currentPortalId = portalId;
+    this.save();
+
+    return {
+      access_token: `mock-token-${userId}-${Date.now()}`,
+      token_type: 'bearer',
+      user: { ...user },
     };
   }
 
@@ -384,21 +459,27 @@ class MockStore {
      PROJECTS
      ================================================================ */
   getProjects(): Project[] {
-    return [...this.db.projects];
+    const portalId = this.db.currentPortalId ?? DEFAULT_PORTAL_ID;
+    return this.db.projects
+      .filter((x) => (x.portal_id ?? DEFAULT_PORTAL_ID) === portalId)
+      .map((x) => ({ ...x }));
   }
   getProject(id: number): Project {
-    const p = this.db.projects.find((x) => x.id === id);
+    const portalId = this.db.currentPortalId ?? DEFAULT_PORTAL_ID;
+    const p = this.db.projects.find((x) => x.id === id && (x.portal_id ?? DEFAULT_PORTAL_ID) === portalId);
     if (!p) throw new Error('Объект не найден');
     return { ...p };
   }
   createProject(data: ProjectCreate): Project {
     const now = new Date().toISOString();
+    const portalId = this.db.currentPortalId ?? DEFAULT_PORTAL_ID;
     const p: Project = {
       id: genId(), name: data.name, address: data.address || '', client: data.client,
       start_date: data.start_date, end_date: data.end_date || null,
       status: data.status || 'new', contract_amount: data.contract_amount,
       planned_cost: data.planned_cost, notes: data.notes || '',
       created_at: now, updated_at: now,
+      portal_id: portalId,
     };
     this.db.projects.push(p);
     this.save();
@@ -518,6 +599,7 @@ class MockStore {
     const wl = this.db.workLogs[idx];
     Object.assign(wl, data);
     if (typeof data.accrued_amount === 'number') wl.accrued_amount = data.accrued_amount;
+    wl.updated_by = this.db.currentUserId || 1;
     this.save();
     return this.enrichWorkLog({ ...wl });
   }
@@ -529,6 +611,7 @@ class MockStore {
     const idx = this.db.workLogs.findIndex((x) => x.id === id);
     if (idx === -1) throw new Error('Запись не найдена');
     this.db.workLogs[idx].status = 'approved';
+    this.db.workLogs[idx].updated_by = this.db.currentUserId || 1;
     this.save();
     return this.enrichWorkLog({ ...this.db.workLogs[idx] });
   }
@@ -536,6 +619,7 @@ class MockStore {
     const idx = this.db.workLogs.findIndex((x) => x.id === id);
     if (idx === -1) throw new Error('Запись не найдена');
     this.db.workLogs[idx].status = 'rejected';
+    this.db.workLogs[idx].updated_by = this.db.currentUserId || 1;
     this.save();
     return this.enrichWorkLog({ ...this.db.workLogs[idx] });
   }
@@ -545,7 +629,12 @@ class MockStore {
       crew: this.db.crews.find((c) => c.id === wl.crew_id),
       work_type: this.db.workTypes.find((w) => w.id === wl.work_type_id),
       creator: this.db.users.find((u) => u.id === wl.created_by),
+      updated_by_user: wl.updated_by ? this.db.users.find((u) => u.id === wl.updated_by) : undefined,
     };
+  }
+
+  private getUser(id: number): User | undefined {
+    return this.db.users.find((u) => u.id === id);
   }
 
   /* ================================================================
@@ -554,7 +643,11 @@ class MockStore {
   getCashIns(projectId?: number): CashIn[] {
     let list = [...this.db.cashIns];
     if (projectId) list = list.filter((x) => x.project_id === projectId);
-    return list;
+    return list.map((ci) => ({
+      ...ci,
+      creator: this.getUser(ci.created_by),
+      updated_by_user: ci.updated_by ? this.getUser(ci.updated_by) : undefined,
+    }));
   }
   createCashIn(data: CashInCreate): CashIn {
     const ci: CashIn = {
@@ -564,19 +657,28 @@ class MockStore {
     };
     this.db.cashIns.push(ci);
     this.save();
-    return { ...ci };
+    return { ...ci, creator: this.getUser(ci.created_by) };
   }
   getCashIn(id: number): CashIn {
     const ci = this.db.cashIns.find((x) => x.id === id);
     if (!ci) throw new Error('Платёж не найден');
-    return { ...ci };
+    return {
+      ...ci,
+      creator: this.getUser(ci.created_by),
+      updated_by_user: ci.updated_by ? this.getUser(ci.updated_by) : undefined,
+    };
   }
   updateCashIn(id: number, data: Partial<CashInCreate>): CashIn {
     const idx = this.db.cashIns.findIndex((x) => x.id === id);
     if (idx === -1) throw new Error('Платёж не найден');
     Object.assign(this.db.cashIns[idx], data);
+    this.db.cashIns[idx].updated_by = this.db.currentUserId || 1;
     this.save();
-    return { ...this.db.cashIns[idx] };
+    return {
+      ...this.db.cashIns[idx],
+      creator: this.getUser(this.db.cashIns[idx].created_by),
+      updated_by_user: this.getUser(this.db.cashIns[idx].updated_by!),
+    };
   }
   deleteCashIn(id: number): void {
     this.db.cashIns = this.db.cashIns.filter((x) => x.id !== id);
@@ -589,7 +691,11 @@ class MockStore {
   getExpenses(projectId?: number): Expense[] {
     let list = [...this.db.expenses];
     if (projectId) list = list.filter((x) => x.project_id === projectId);
-    return list;
+    return list.map((e) => ({
+      ...e,
+      creator: this.getUser(e.created_by),
+      updated_by_user: e.updated_by ? this.getUser(e.updated_by) : undefined,
+    }));
   }
   createExpense(data: ExpenseCreate): Expense {
     const e: Expense = {
@@ -599,22 +705,46 @@ class MockStore {
     };
     this.db.expenses.push(e);
     this.save();
-    return { ...e };
+    return { ...e, creator: this.getUser(e.created_by) };
   }
   getExpense(id: number): Expense {
     const e = this.db.expenses.find((x) => x.id === id);
     if (!e) throw new Error('Расход не найден');
-    return { ...e };
+    return {
+      ...e,
+      creator: this.getUser(e.created_by),
+      updated_by_user: e.updated_by ? this.getUser(e.updated_by) : undefined,
+    };
   }
   updateExpense(id: number, data: Partial<ExpenseCreate>): Expense {
     const idx = this.db.expenses.findIndex((x) => x.id === id);
     if (idx === -1) throw new Error('Расход не найден');
     Object.assign(this.db.expenses[idx], data);
+    this.db.expenses[idx].updated_by = this.db.currentUserId || 1;
     this.save();
-    return { ...this.db.expenses[idx] };
+    return {
+      ...this.db.expenses[idx],
+      creator: this.getUser(this.db.expenses[idx].created_by),
+      updated_by_user: this.getUser(this.db.expenses[idx].updated_by!),
+    };
   }
   deleteExpense(id: number): void {
     this.db.expenses = this.db.expenses.filter((x) => x.id !== id);
+    this.save();
+  }
+
+  getCustomExpenseCategories(): string[] {
+    const pid = this.db.currentPortalId || DEFAULT_PORTAL_ID;
+    return [...(this.db.customExpenseCategories[pid] || [])];
+  }
+
+  addCustomExpenseCategory(name: string): void {
+    const trimmed = (name || '').trim();
+    if (!trimmed) return;
+    const pid = this.db.currentPortalId || DEFAULT_PORTAL_ID;
+    const list = this.db.customExpenseCategories[pid] || [];
+    if (list.includes(trimmed)) return;
+    this.db.customExpenseCategories[pid] = [...list, trimmed];
     this.save();
   }
 
@@ -627,6 +757,8 @@ class MockStore {
     return list.map((p) => ({
       ...p,
       crew: this.db.crews.find((c) => c.id === p.crew_id),
+      creator: this.getUser(p.created_by),
+      updated_by_user: p.updated_by ? this.getUser(p.updated_by) : undefined,
     }));
   }
   createPayout(data: PayoutCreate): Payout {
@@ -639,34 +771,59 @@ class MockStore {
     };
     this.db.payouts.push(p);
     this.save();
-    return { ...p };
+    return { ...p, creator: this.getUser(p.created_by) };
   }
   approvePayout(id: number): Payout {
     const idx = this.db.payouts.findIndex((x) => x.id === id);
     if (idx === -1) throw new Error('Выплата не найдена');
     this.db.payouts[idx].status = 'approved';
     this.db.payouts[idx].approved_by = this.db.currentUserId || 1;
+    this.db.payouts[idx].updated_by = this.db.currentUserId || 1;
     this.save();
-    return { ...this.db.payouts[idx], crew: this.db.crews.find((c) => c.id === this.db.payouts[idx].crew_id) };
+    const p = this.db.payouts[idx];
+    return {
+      ...p,
+      crew: this.db.crews.find((c) => c.id === p.crew_id),
+      creator: this.getUser(p.created_by),
+      updated_by_user: this.getUser(p.updated_by!),
+    };
   }
   cancelPayout(id: number): Payout {
     const idx = this.db.payouts.findIndex((x) => x.id === id);
     if (idx === -1) throw new Error('Выплата не найдена');
     this.db.payouts[idx].status = 'cancelled';
+    this.db.payouts[idx].updated_by = this.db.currentUserId || 1;
     this.save();
-    return { ...this.db.payouts[idx], crew: this.db.crews.find((c) => c.id === this.db.payouts[idx].crew_id) };
+    const p = this.db.payouts[idx];
+    return {
+      ...p,
+      crew: this.db.crews.find((c) => c.id === p.crew_id),
+      creator: this.getUser(p.created_by),
+      updated_by_user: this.getUser(p.updated_by!),
+    };
   }
   getPayout(id: number): Payout {
     const p = this.db.payouts.find((x) => x.id === id);
     if (!p) throw new Error('Выплата не найдена');
-    return { ...p, crew: this.db.crews.find((c) => c.id === p.crew_id) };
+    return {
+      ...p,
+      crew: this.db.crews.find((c) => c.id === p.crew_id),
+      creator: this.getUser(p.created_by),
+      updated_by_user: p.updated_by ? this.getUser(p.updated_by) : undefined,
+    };
   }
   updatePayout(id: number, data: Partial<PayoutCreate>): Payout {
     const idx = this.db.payouts.findIndex((x) => x.id === id);
     if (idx === -1) throw new Error('Выплата не найдена');
     Object.assign(this.db.payouts[idx], data);
+    this.db.payouts[idx].updated_by = this.db.currentUserId || 1;
     this.save();
-    return { ...this.db.payouts[idx], crew: this.db.crews.find((c) => c.id === this.db.payouts[idx].crew_id) };
+    return {
+      ...this.db.payouts[idx],
+      crew: this.db.crews.find((c) => c.id === this.db.payouts[idx].crew_id),
+      creator: this.getUser(this.db.payouts[idx].created_by),
+      updated_by_user: this.getUser(this.db.payouts[idx].updated_by!),
+    };
   }
   deletePayout(id: number): void {
     this.db.payouts = this.db.payouts.filter((x) => x.id !== id);
@@ -962,6 +1119,14 @@ class MockStore {
     return sub;
   }
 
+  private normalizeSubscription(sub: Subscription): Subscription {
+    return {
+      ...sub,
+      planTier: sub.planTier ?? null,
+      planInterval: sub.planInterval ?? sub.plan ?? null,
+    };
+  }
+
   getSubscription(): Subscription {
     const userId = this.db.currentUserId;
     if (!userId) throw new Error('Не авторизован');
@@ -972,6 +1137,7 @@ class MockStore {
     }
 
     let sub = this.ensureSubscription(userId);
+    sub = this.normalizeSubscription(sub);
     const updated = checkAndTransition(sub);
     if (updated.status !== sub.status) {
       const idx = this.db.subscriptions.findIndex((s) => s.id === sub!.id);
@@ -985,16 +1151,17 @@ class MockStore {
 
   /**
    * Получение подписки для проверки доступа (любой пользователь портала).
-   * Берёт подписку админа портала (userId=1).
+   * Берёт подписку текущего пользователя или админа по умолчанию (userId=1).
    */
   getPortalSubscription(): Subscription {
-    let sub = this.db.subscriptions.find((s) => s.userId === 1);
+    const uid = this.db.currentUserId ?? 1;
+    let sub = this.db.subscriptions.find((s) => s.userId === uid);
     if (!sub) {
-      sub = createTrialSubscription(1, genId());
+      sub = createTrialSubscription(uid, genId());
       this.db.subscriptions.push(sub);
       this.save();
     }
-
+    sub = this.normalizeSubscription(sub);
     const updated = checkAndTransition(sub);
     if (updated.status !== sub.status) {
       const idx = this.db.subscriptions.findIndex((s) => s.id === sub!.id);
@@ -1006,14 +1173,14 @@ class MockStore {
     return { ...sub };
   }
 
-  subscribe(plan: BillingPlan): { subscription: Subscription; invoice: Invoice } {
+  subscribe(planTier: PlanTier, planInterval: BillingPlan): { subscription: Subscription; invoice: Invoice } {
     const userId = this.db.currentUserId;
     if (!userId) throw new Error('Не авторизован');
 
     const sub = this.ensureSubscription(userId);
 
-    const invoice = this.paymentService.createInvoice(sub.id, plan);
-    const initiated = transition(sub, { type: 'PAYMENT_INITIATED', plan });
+    const invoice = this.paymentService.createInvoice(sub.id, planTier, planInterval);
+    const initiated = transition(sub, { type: 'PAYMENT_INITIATED', planTier, planInterval });
     if (initiated) {
       const idx = this.db.subscriptions.findIndex((s) => s.id === sub.id);
       if (idx !== -1) this.db.subscriptions[idx] = initiated;
@@ -1035,8 +1202,10 @@ class MockStore {
     const sub = this.db.subscriptions.find((s) => s.id === invoice.subscriptionId);
     if (!sub) throw new Error('Подписка не найдена');
 
-    const paidInvoice = this.paymentService.simulatePaymentSuccess(sub.id, invoice.plan);
-    const activated = transition(sub, { type: 'PAYMENT_SUCCESS', plan: invoice.plan });
+    const planTier = invoice.planTier ?? 'business';
+    const planInterval = invoice.plan ?? 'monthly';
+    const paidInvoice = this.paymentService.simulatePaymentSuccess(sub.id, planTier, planInterval);
+    const activated = transition(sub, { type: 'PAYMENT_SUCCESS', planTier, planInterval });
     if (activated) {
       const idx = this.db.subscriptions.findIndex((s) => s.id === sub.id);
       if (idx !== -1) this.db.subscriptions[idx] = activated;
@@ -1058,7 +1227,7 @@ class MockStore {
     const sub = this.db.subscriptions.find((s) => s.id === invoice.subscriptionId);
     if (!sub) throw new Error('Подписка не найдена');
 
-    const failedInvoice = this.paymentService.simulatePaymentFail(sub.id, invoice.plan);
+    const failedInvoice = this.paymentService.simulatePaymentFail(sub.id, invoice.planTier ?? 'business', invoice.plan ?? 'monthly');
     const restored = transition(sub, { type: 'PAYMENT_FAILED' });
     if (restored) {
       const idx = this.db.subscriptions.findIndex((s) => s.id === sub.id);
@@ -1307,6 +1476,7 @@ export async function handleMockRequest(
 
   /* --- AUTH --- */
   if (m === 'POST' && p === '/auth/login') return store.login(data.username, data.password);
+  if (m === 'POST' && p === '/auth/register') return store.register(data);
   if (m === 'GET' && p === '/auth/me') return store.getMe();
   if (m === 'PUT' && p === '/auth/profile') return store.updateProfile(data);
   if (m === 'POST' && p === '/auth/change-password') return store.changePassword(data);
@@ -1395,6 +1565,12 @@ export async function handleMockRequest(
     if (m === 'DELETE') { store.deleteExpense(id); return undefined; }
   }
   if (m === 'POST' && p === '/expenses') return store.createExpense(data);
+  if (m === 'GET' && p === '/expense-categories') return store.getCustomExpenseCategories();
+  if (m === 'POST' && p === '/expense-categories') {
+    const name = typeof (data as { name?: string })?.name === 'string' ? (data as { name: string }).name.trim() : '';
+    if (name) store.addCustomExpenseCategory(name);
+    return store.getCustomExpenseCategories();
+  }
 
   /* --- PAYOUTS --- */
   if (m === 'GET' && p === '/payouts') {
@@ -1464,7 +1640,7 @@ export async function handleMockRequest(
   /* --- BILLING --- */
   if (m === 'GET' && p === '/billing/subscription') return store.getSubscription();
   if (m === 'GET' && p === '/billing/portal-subscription') return store.getPortalSubscription();
-  if (m === 'POST' && p === '/billing/subscribe') return store.subscribe(data.plan);
+  if (m === 'POST' && p === '/billing/subscribe') return store.subscribe(data.planTier, data.planInterval);
   if (m === 'POST' && p === '/billing/simulate-payment-success') return store.simulatePaymentSuccess(data.invoiceId);
   if (m === 'POST' && p === '/billing/simulate-payment-fail') return store.simulatePaymentFail(data.invoiceId);
   if (m === 'POST' && p === '/billing/block') return store.adminBlockSubscription(data.userId, data.reason);

@@ -137,6 +137,10 @@ export function DocumentTemplatesPage() {
               <li><code>{'{basis}'}</code> — основание</li>
               <li><code>{'{taxation}'}</code> — налогообложение (текст, например "Без НДС", "НДС 20%")</li>
               <li><code>{'{total}'}</code> — итоговая сумма</li>
+              <li><code>{'{total_without_vat}'}</code> — итого без НДС / сумма без налога</li>
+              <li><code>{'{total_vat}'}</code> — сумма НДС / итого НДС</li>
+              <li><code>{'{total_with_vat}'}</code> — сумма с учётом НДС / итого к оплате</li>
+              <li><code>{'{total_in_words}'}</code> — итого к оплате прописью</li>
               <li><code>{'{notes}'}</code> — примечания</li>
             </ul>
           </div>
@@ -151,6 +155,7 @@ export function DocumentTemplatesPage() {
               <li><code>{'{seller_bank}'}</code> — расчетный счет</li>
               <li><code>{'{seller_bik}'}</code> — БИК</li>
               <li><code>{'{seller_bank_name}'}</code> — наименование банка</li>
+              <li><code>{'{seller_corr_account}'}</code> — корреспондентский счёт</li>
               <li><code>{'{seller_director}'}</code> — должность и ФИО руководителя</li>
               <li><code>{'{seller_signature}'}</code> — строка для подписи продавца</li>
             </ul>
@@ -166,6 +171,7 @@ export function DocumentTemplatesPage() {
               <li><code>{'{buyer_bank}'}</code> — расчетный счет</li>
               <li><code>{'{buyer_bik}'}</code> — БИК</li>
               <li><code>{'{buyer_bank_name}'}</code> — наименование банка</li>
+              <li><code>{'{buyer_corr_account}'}</code> — корреспондентский счёт</li>
               <li><code>{'{buyer_director}'}</code> — должность и ФИО руководителя</li>
               <li><code>{'{buyer_signature}'}</code> — строка для подписи покупателя</li>
             </ul>

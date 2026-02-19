@@ -11,9 +11,11 @@ import { SubscriptionGuard } from './billing/SubscriptionGuard';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
+import { RegisterPage } from './pages/RegisterPage';
 import Landing from './pages/Landing';
 import { DashboardPage } from './pages/DashboardPage';
 import { ProjectPage } from './pages/ProjectPage';
+import { ProjectActivityPage } from './pages/ProjectActivityPage';
 import { ProjectFormPage } from './pages/ProjectFormPage';
 import { CrewsPage } from './pages/CrewsPage';
 import { CrewFormPage } from './pages/CrewFormPage';
@@ -48,6 +50,7 @@ export default function App() {
             {/* Публичная landing страница */}
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
 
             {/* Защищённые маршруты */}
             <Route
@@ -72,6 +75,7 @@ export default function App() {
 
             {/* Карточка объекта — секции из сайдбара */}
             <Route path="/projects/:id" element={<ProjectPage />} />
+            <Route path="/projects/:id/activity" element={<ProjectActivityPage />} />
             <Route path="/projects/:id/works" element={<ProjectPage />} />
             <Route path="/projects/:id/expenses-payouts" element={<ProjectPage />} />
             <Route path="/projects/:id/payments" element={<ProjectPage />} />

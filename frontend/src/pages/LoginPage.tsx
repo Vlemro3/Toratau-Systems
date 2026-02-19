@@ -2,7 +2,7 @@
  * Страница авторизации
  */
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
 const IS_MOCK = import.meta.env.VITE_MOCK === 'true';
@@ -51,6 +51,7 @@ export function LoginPage() {
     <div className="login-page">
       <div className="login-card">
         <div className="login-card__header">
+          <img src="/logo.png" alt="Toratau" className="login-card__logo-img" />
           <h1 className="login-card__logo">Toratau Systems</h1>
           <p className="login-card__subtitle">Управление строительными объектами</p>
         </div>
@@ -88,6 +89,10 @@ export function LoginPage() {
           <button type="submit" className="btn btn--primary btn--block" disabled={loading}>
             {loading ? 'Вход...' : 'Войти'}
           </button>
+
+          <p className="login-card__footer" style={{ marginTop: 16, textAlign: 'center' }}>
+            Нет аккаунта? <Link to="/register" className="link">Зарегистрироваться</Link>
+          </p>
 
           {IS_MOCK && (
             <div className="demo-hint">

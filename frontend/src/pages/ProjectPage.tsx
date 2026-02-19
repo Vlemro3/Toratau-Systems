@@ -19,10 +19,10 @@ import { formatMoney, formatDate } from '../utils/format';
 import {
   PROJECT_STATUS_LABELS,
   PROJECT_STATUS_COLORS,
-  EXPENSE_CATEGORY_LABELS,
+  getExpenseCategoryLabel,
   PAYMENT_METHOD_LABELS,
 } from '../utils/constants';
-import type { Project, ProjectReport, WorkLog, CashIn, Expense, Payout, ExpenseCategory } from '../types';
+import type { Project, ProjectReport, WorkLog, CashIn, Expense, Payout } from '../types';
 
 type Section = 'summary' | 'works' | 'expenses-payouts' | 'payments';
 
@@ -232,7 +232,7 @@ function SummaryDashboard({ project, report, workLogs, cashIns, expenses, payout
             <div className="dash-bar-chart">
               {Object.entries(expByCategory).sort((a, b) => b[1] - a[1]).map(([cat, amount]) => {
                 const colors: Record<string, string> = { materials: '#3b82f6', tools: '#8b5cf6', transport: '#f97316', other: '#6b7280' };
-                return <BarRow key={cat} label={EXPENSE_CATEGORY_LABELS[cat as ExpenseCategory] || cat} value={formatMoney(amount)} pct={(amount / expTotal) * 100} color={colors[cat] || '#6b7280'} />;
+                return <BarRow key={cat} label={getExpenseCategoryLabel(cat)} value={formatMoney(amount)} pct={(amount / expTotal) * 100} color={colors[cat] || '#6b7280'} />;
               })}
             </div>
           </>)}
@@ -245,16 +245,31 @@ function SummaryDashboard({ project, report, workLogs, cashIns, expenses, payout
             <CrewsTable report={report} />
           </div>
         )}
-        <div className="dash-card"><h3 className="dash-card__title">Последняя активность</h3>
-          {allDates.length === 0 ? <p className="text-muted" style={{ padding: '16px 0' }}>Нет записей</p> : (
-            <div className="dash-timeline">
-              {allDates.slice(0, 8).map((item, i) => (
-                <div className="dash-timeline__item" key={i}><div className="dash-timeline__dot" /><div className="dash-timeline__content">
-                  <div className="dash-timeline__text">{item.label}</div>
-                  <div className="dash-timeline__meta">{formatDate(item.date)}{item.who && ` · ${item.who}`}</div>
-                </div></div>
-              ))}
-            </div>
+        <div className="dash-card">
+          <h3 className="dash-card__title">Последняя активность</h3>
+          {allDates.length === 0 ? (
+            <p className="text-muted" style={{ padding: '16px 0' }}>Нет записей</p>
+          ) : (
+            <>
+              <div className="dash-timeline">
+                {allDates.slice(0, 8).map((item, i) => (
+                  <div className="dash-timeline__item" key={i}>
+                    <div className="dash-timeline__dot" />
+                    <div className="dash-timeline__content">
+                      <div className="dash-timeline__text">{item.label}</div>
+                      <div className="dash-timeline__meta">
+                        {formatDate(item.date)} · {item.who ?? '—'}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p style={{ marginTop: 12, marginBottom: 0 }}>
+                <Link to={`/projects/${project.id}/activity`} className="link">
+                  Все логи за 3 месяца →
+                </Link>
+              </p>
+            </>
           )}
         </div>
       </div>
@@ -309,10 +324,11 @@ function WorksSection({ projectId, workLogs, isAdmin, onDelete, onDeleteMany }: 
           { key: 'volume', label: 'Объём', className: 'text-right', sortValue: (wl) => wl.volume },
           { key: 'amount', label: 'Сумма', className: 'text-right', sortValue: (wl) => wl.accrued_amount },
           { key: 'comment', label: 'Комментарий' },
+          { key: 'changed_by', label: 'Кем изменён', sortValue: (wl) => wl.updated_by_user?.full_name || wl.creator?.full_name || '' },
           isAdmin && { key: 'actions', label: 'Действия', className: 'text-center' },
         ]}
         defaultSortKey="date"
-        searchFields={(wl) => `${wl.work_type?.name || ''} ${wl.crew?.name || ''} ${wl.comment || ''} ${wl.date}`}
+        searchFields={(wl) => `${wl.work_type?.name || ''} ${wl.crew?.name || ''} ${wl.comment || ''} ${wl.date} ${wl.creator?.full_name || ''} ${wl.updated_by_user?.full_name || ''}`}
         emptyMessage="Нет записей о работах" emptyIcon="🔨"
         showCheckboxes={isAdmin}
         onDeleteMany={isAdmin ? onDeleteMany : undefined}
@@ -325,6 +341,7 @@ function WorksSection({ projectId, workLogs, isAdmin, onDelete, onDeleteMany }: 
             <td className="text-right">{wl.volume} {wl.work_type?.unit || ''}</td>
             <td className="text-right text-bold">{formatMoney(wl.accrued_amount)}</td>
             <td className="text-muted">{wl.comment || '—'}</td>
+            <td className="text-muted" style={{ fontSize: '0.875rem' }}>{wl.updated_by_user?.full_name || wl.creator?.full_name || '—'}</td>
             {isAdmin && <td><div className="table-actions">
               <Link to={`/projects/${projectId}/work-logs/${wl.id}/edit`} className="table-action table-action--edit" title="Редактировать"><IconEdit /></Link>
               <button className="table-action table-action--delete" onClick={() => onDelete('Удалить работу?', `${wl.work_type?.name} — ${formatMoney(wl.accrued_amount)}`, () => deleteWorkLog(wl.id))} title="Удалить"><IconDelete /></button>
@@ -348,10 +365,11 @@ function PaymentsSection({ projectId, cashIns, isAdmin, onDelete, onDeleteMany }
           { key: 'date', label: 'Дата', sortValue: (ci) => ci.date },
           { key: 'amount', label: 'Сумма', className: 'text-right', sortValue: (ci) => ci.amount },
           { key: 'comment', label: 'Комментарий' },
+          { key: 'changed_by', label: 'Кем изменён', sortValue: (ci) => ci.updated_by_user?.full_name || ci.creator?.full_name || '' },
           isAdmin && { key: 'actions', label: 'Действия', className: 'text-center' },
         ]}
         defaultSortKey="date"
-        searchFields={(ci) => `${ci.comment || ''} ${ci.date} ${ci.amount}`}
+        searchFields={(ci) => `${ci.comment || ''} ${ci.date} ${ci.amount} ${ci.creator?.full_name || ''} ${ci.updated_by_user?.full_name || ''}`}
         emptyMessage="Нет входящих платежей" emptyIcon="💰"
         showCheckboxes={isAdmin}
         onDeleteMany={isAdmin ? onDeleteMany : undefined}
@@ -361,6 +379,7 @@ function PaymentsSection({ projectId, cashIns, isAdmin, onDelete, onDeleteMany }
             <td style={{ whiteSpace: 'nowrap' }}>{formatDate(ci.date)}</td>
             <td className="text-right text-bold">{formatMoney(ci.amount)}</td>
             <td className="text-muted">{ci.comment || '—'}</td>
+            <td className="text-muted" style={{ fontSize: '0.875rem' }}>{ci.updated_by_user?.full_name || ci.creator?.full_name || '—'}</td>
             {isAdmin && <td><div className="table-actions">
               <Link to={`/projects/${projectId}/cashin/${ci.id}/edit`} className="table-action table-action--edit" title="Редактировать"><IconEdit /></Link>
               <button className="table-action table-action--delete" onClick={() => onDelete('Удалить платёж?', `${formatMoney(ci.amount)} от ${formatDate(ci.date)}`, () => deleteCashIn(ci.id))} title="Удалить"><IconDelete /></button>
@@ -389,13 +408,14 @@ function ExpensesAndPayoutsSection({ projectId, expenses, payouts, isAdmin, onDe
           items={expenses}
           columns={[
             { key: 'date', label: 'Дата', sortValue: (e) => e.date },
-            { key: 'category', label: 'Категория', sortValue: (e) => EXPENSE_CATEGORY_LABELS[e.category as ExpenseCategory] || e.category },
+            { key: 'category', label: 'Категория', sortValue: (e) => getExpenseCategoryLabel(e.category) },
             { key: 'amount', label: 'Сумма', className: 'text-right', sortValue: (e) => e.amount },
             { key: 'comment', label: 'Комментарий' },
+            { key: 'changed_by', label: 'Кем изменён', sortValue: (e) => e.updated_by_user?.full_name || e.creator?.full_name || '' },
             isAdmin && { key: 'actions', label: 'Действия', className: 'text-center' },
           ]}
           defaultSortKey="date"
-          searchFields={(e) => `${EXPENSE_CATEGORY_LABELS[e.category as ExpenseCategory] || e.category} ${e.comment || ''} ${e.date} ${e.amount}`}
+          searchFields={(e) => `${getExpenseCategoryLabel(e.category)} ${e.comment || ''} ${e.date} ${e.amount} ${e.creator?.full_name || ''} ${e.updated_by_user?.full_name || ''}`}
           emptyMessage="Нет расходов" emptyIcon="🧾"
           showCheckboxes={isAdmin}
           onDeleteMany={isAdmin ? (ids) => onDeleteMany('Удалить расходы?', ids, deleteExpense) : undefined}
@@ -403,9 +423,10 @@ function ExpensesAndPayoutsSection({ projectId, expenses, payouts, isAdmin, onDe
             <tr key={exp.id} className={sel ? 'table-row--selected' : ''}>
               {isAdmin && <td style={{ textAlign: 'center' }}><input type="checkbox" checked={sel} onChange={toggle} /></td>}
               <td style={{ whiteSpace: 'nowrap' }}>{formatDate(exp.date)}</td>
-              <td>{EXPENSE_CATEGORY_LABELS[exp.category as ExpenseCategory] || exp.category}</td>
+              <td>{getExpenseCategoryLabel(exp.category)}</td>
               <td className="text-right text-bold">{formatMoney(exp.amount)}</td>
               <td className="text-muted">{exp.comment || '—'}</td>
+              <td className="text-muted" style={{ fontSize: '0.875rem' }}>{exp.updated_by_user?.full_name || exp.creator?.full_name || '—'}</td>
               {isAdmin && <td><div className="table-actions">
                 <Link to={`/projects/${projectId}/expenses/${exp.id}/edit`} className="table-action table-action--edit" title="Редактировать"><IconEdit /></Link>
                 <button className="table-action table-action--delete" onClick={() => onDelete('Удалить расход?', `${formatMoney(exp.amount)}`, () => deleteExpense(exp.id))} title="Удалить"><IconDelete /></button>
@@ -426,10 +447,11 @@ function ExpensesAndPayoutsSection({ projectId, expenses, payouts, isAdmin, onDe
             { key: 'amount', label: 'Сумма', className: 'text-right', sortValue: (p) => p.amount },
             { key: 'method', label: 'Способ', sortValue: (p) => p.payment_method },
             { key: 'comment', label: 'Комментарий' },
+            { key: 'changed_by', label: 'Кем изменён', sortValue: (p) => p.updated_by_user?.full_name || p.creator?.full_name || '' },
             isAdmin && { key: 'actions', label: 'Действия', className: 'text-center' },
           ]}
           defaultSortKey="date"
-          searchFields={(p) => `${p.crew?.name || ''} ${p.comment || ''} ${p.date} ${p.amount}`}
+          searchFields={(p) => `${p.crew?.name || ''} ${p.comment || ''} ${p.date} ${p.amount} ${p.creator?.full_name || ''} ${p.updated_by_user?.full_name || ''}`}
           emptyMessage="Нет выплат" emptyIcon="💸"
           showCheckboxes={isAdmin}
           onDeleteMany={isAdmin ? (ids) => onDeleteMany('Удалить выплаты?', ids, deletePayout) : undefined}
@@ -441,6 +463,7 @@ function ExpensesAndPayoutsSection({ projectId, expenses, payouts, isAdmin, onDe
               <td className="text-right text-bold">{formatMoney(p.amount)}</td>
               <td>{PAYMENT_METHOD_LABELS[p.payment_method]}</td>
               <td className="text-muted">{p.comment || '—'}</td>
+              <td className="text-muted" style={{ fontSize: '0.875rem' }}>{p.updated_by_user?.full_name || p.creator?.full_name || '—'}</td>
               {isAdmin && <td><div className="table-actions">
                 <Link to={`/projects/${projectId}/payouts/${p.id}/edit`} className="table-action table-action--edit" title="Редактировать"><IconEdit /></Link>
                 <button className="table-action table-action--delete" onClick={() => onDelete('Удалить выплату?', `${p.crew?.name} — ${formatMoney(p.amount)}`, () => deletePayout(p.id))} title="Удалить"><IconDelete /></button>

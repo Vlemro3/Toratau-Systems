@@ -8,8 +8,16 @@
 import { useSubscription } from './SubscriptionContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { BILLING_CONFIG, formatPrice } from './billingConfig';
+import type { PlanTier } from './billingTypes';
 
 const ALLOWED_PATHS = ['/billing', '/login'];
+
+const TIER_ORDER: PlanTier[] = ['start', 'business', 'premium', 'unlim'];
+
+function formatObjectLimit(limit: number | null): string {
+  if (limit === null) return 'без ограничений';
+  return `до ${limit} объектов`;
+}
 
 export function SubscriptionGuard({ children }: { children: React.ReactNode }) {
   const { subscription, accessAllowed, loading } = useSubscription();
@@ -25,6 +33,7 @@ export function SubscriptionGuard({ children }: { children: React.ReactNode }) {
       expired: 'Срок подписки истёк',
       blocked: 'Подписка заблокирована',
     };
+    const isTrialEnded = subscription.status === 'expired' && subscription.trialEndsAt;
 
     return (
       <div className="subscription-overlay">
@@ -47,31 +56,39 @@ export function SubscriptionGuard({ children }: { children: React.ReactNode }) {
           )}
 
           <p className="subscription-overlay__text">
-            Для продолжения работы с порталом необходимо оформить подписку.
+            {isTrialEnded
+              ? 'Пробный период (14 дней) закончился. Выберите тариф и оплатите подписку, чтобы продолжить работу.'
+              : 'Для продолжения работы с порталом необходимо оформить подписку.'}
           </p>
 
           <div className="subscription-overlay__plans">
-            <div className="subscription-overlay__plan">
-              <span className="subscription-overlay__plan-name">Месяц</span>
-              <span className="subscription-overlay__plan-price">
-                {formatPrice(BILLING_CONFIG.plans.monthly.price)}
-              </span>
-            </div>
-            <div className="subscription-overlay__plan subscription-overlay__plan--accent">
-              <span className="subscription-overlay__plan-name">
-                Год <span className="subscription-overlay__plan-badge">−{BILLING_CONFIG.plans.yearly.discountPercent}%</span>
-              </span>
-              <span className="subscription-overlay__plan-price">
-                {formatPrice(BILLING_CONFIG.plans.yearly.price)}
-              </span>
-            </div>
+            {TIER_ORDER.map((tier) => {
+              const config = BILLING_CONFIG.tiers[tier];
+              return (
+                <div
+                  key={tier}
+                  className={`subscription-overlay__plan ${config.highlighted ? 'subscription-overlay__plan--accent' : ''}`}
+                >
+                  <span className="subscription-overlay__plan-name">
+                    {config.label}
+                    {config.highlighted && <span className="subscription-overlay__plan-badge"> Популярный</span>}
+                  </span>
+                  <span className="subscription-overlay__plan-price">
+                    {formatPrice(config.priceMonthly)}/мес
+                  </span>
+                  <span className="subscription-overlay__plan-limit">
+                    {formatObjectLimit(config.objectLimit)}
+                  </span>
+                </div>
+              );
+            })}
           </div>
 
           <button
             className="btn btn--primary btn--lg subscription-overlay__btn"
             onClick={() => navigate('/billing')}
           >
-            Перейти к оплате
+            Выбрать тариф и оплатить
           </button>
         </div>
       </div>

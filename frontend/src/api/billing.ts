@@ -2,7 +2,7 @@
  * API-клиент для модуля биллинга.
  */
 import { api } from './client';
-import type { Subscription, Invoice, PaymentLog, BillingPlan } from '../billing/billingTypes';
+import type { Subscription, Invoice, PaymentLog, BillingPlan, PlanTier } from '../billing/billingTypes';
 
 export function getSubscription(): Promise<Subscription> {
   return api.get<Subscription>('/billing/subscription');
@@ -12,8 +12,8 @@ export function getPortalSubscription(): Promise<Subscription> {
   return api.get<Subscription>('/billing/portal-subscription');
 }
 
-export function subscribe(plan: BillingPlan): Promise<{ subscription: Subscription; invoice: Invoice }> {
-  return api.post<{ subscription: Subscription; invoice: Invoice }>('/billing/subscribe', { plan });
+export function subscribe(planTier: PlanTier, planInterval: BillingPlan): Promise<{ subscription: Subscription; invoice: Invoice }> {
+  return api.post<{ subscription: Subscription; invoice: Invoice }>('/billing/subscribe', { planTier, planInterval });
 }
 
 export function simulatePaymentSuccess(invoiceId: number): Promise<{ subscription: Subscription; invoice: Invoice }> {

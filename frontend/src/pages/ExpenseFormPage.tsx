@@ -3,11 +3,13 @@
  */
 import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { createExpense, getExpense, updateExpense } from '../api/expenses';
+import { createExpense, getExpense, updateExpense, getCustomExpenseCategories, addCustomExpenseCategory } from '../api/expenses';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { todayISO } from '../utils/format';
-import { EXPENSE_CATEGORY_LABELS } from '../utils/constants';
+import { EXPENSE_CATEGORY_LABELS, getExpenseCategoryLabel } from '../utils/constants';
 import type { ExpenseCreate } from '../types';
+
+const ADD_CATEGORY_VALUE = '__add__';
 
 export function ExpenseFormPage() {
   const navigate = useNavigate();
@@ -19,6 +21,10 @@ export function ExpenseFormPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+
   const [form, setForm] = useState<ExpenseCreate>({
     project_id: projId,
     date: todayISO(),
@@ -26,6 +32,10 @@ export function ExpenseFormPage() {
     category: 'materials',
     comment: '',
   });
+
+  useEffect(() => {
+    getCustomExpenseCategories().then(setCustomCategories).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (isEdit) {
@@ -44,8 +54,30 @@ export function ExpenseFormPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
+    if (name === 'category') {
+      if (value === ADD_CATEGORY_VALUE) {
+        setShowAddCategory(true);
+        return;
+      }
+      setShowAddCategory(false);
+      setForm((prev) => ({ ...prev, category: value }));
+      return;
+    }
     const isNumeric = type === 'number' || name === 'amount';
     setForm((prev) => ({ ...prev, [name]: isNumeric ? Number(value) : value }));
+  };
+
+  const handleAddCategory = () => {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    addCustomExpenseCategory(name)
+      .then((list) => {
+        setCustomCategories(list);
+        setForm((prev) => ({ ...prev, category: name }));
+        setNewCategoryName('');
+        setShowAddCategory(false);
+      })
+      .catch(() => setError('Не удалось добавить категорию'));
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -79,11 +111,38 @@ export function ExpenseFormPage() {
       <form onSubmit={handleSubmit} className="form form--wide">
         <div className="form-group">
           <label>Категория *</label>
-          <select name="category" value={form.category} onChange={handleChange}>
+          <select
+            name="category"
+            value={showAddCategory ? ADD_CATEGORY_VALUE : form.category}
+            onChange={handleChange}
+          >
             {Object.entries(EXPENSE_CATEGORY_LABELS).map(([key, label]) => (
               <option key={key} value={key}>{label}</option>
             ))}
+            {[...customCategories, form.category].filter((c) => c && !(c in EXPENSE_CATEGORY_LABELS)).filter((c, i, a) => a.indexOf(c) === i).map((name) => (
+              <option key={name} value={name}>{getExpenseCategoryLabel(name)}</option>
+            ))}
+            <option value={ADD_CATEGORY_VALUE}>+ Добавить категорию...</option>
           </select>
+          {showAddCategory && (
+            <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+              <input
+                type="text"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                placeholder="Название категории"
+                className="form-control"
+                style={{ flex: 1 }}
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddCategory())}
+              />
+              <button type="button" className="btn btn--primary btn--sm" onClick={handleAddCategory} disabled={!newCategoryName.trim()}>
+                Добавить
+              </button>
+              <button type="button" className="btn btn--ghost btn--sm" onClick={() => { setShowAddCategory(false); setNewCategoryName(''); }}>
+                Отмена
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="form-row">
