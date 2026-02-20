@@ -22,7 +22,7 @@ function isArchived(status: ProjectStatus) {
 export function ProjectSelector() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAdmin } = useAuth();
+  const { isAdmin, isForeman } = useAuth();
   const { subscription } = useSubscription();
 
   const [projects, setProjects] = useState<Project[]>([]);
@@ -141,14 +141,16 @@ export function ProjectSelector() {
           </div>
 
           <div className="project-selector__list">
-            <button
-              type="button"
-              className="project-selector__item project-selector__item--all"
-              onClick={goAllProjects}
-            >
-              <div className="project-selector__item-name">Все объекты</div>
-              <div className="project-selector__item-meta project-selector__item-meta--muted">Открыть список объектов</div>
-            </button>
+            {!isForeman && (
+              <button
+                type="button"
+                className="project-selector__item project-selector__item--all"
+                onClick={goAllProjects}
+              >
+                <div className="project-selector__item-name">Все объекты</div>
+                <div className="project-selector__item-meta project-selector__item-meta--muted">Открыть список объектов</div>
+              </button>
+            )}
 
             {noResults && (
               <div className="project-selector__empty">Ничего не найдено</div>

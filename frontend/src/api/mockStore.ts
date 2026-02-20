@@ -38,7 +38,7 @@ const DEFAULT_PORTAL_ID = 'default';
 
 const DEMO_USERS: User[] = [
   { id: 1, username: 'admin', full_name: 'Ахметов Рустам', role: 'admin', is_active: true, portal_id: DEFAULT_PORTAL_ID },
-  { id: 2, username: 'foreman', full_name: 'Сергеев Дмитрий', role: 'foreman', is_active: true, portal_id: DEFAULT_PORTAL_ID },
+  { id: 2, username: 'foreman', full_name: 'Сергеев Дмитрий', role: 'foreman', is_active: true, portal_id: DEFAULT_PORTAL_ID, project_ids: [1] },
   { id: 3, username: 'superadmin', full_name: 'Super Admin', role: 'superAdmin', is_active: true },
 ];
 
@@ -124,7 +124,18 @@ const DEMO_PAYOUTS: Payout[] = [
 
 const DEMO_EMPLOYEES: Employee[] = [
   { id: 1, username: 'admin', full_name: 'Ахметов Рустам', role: 'admin', is_active: true, portal_id: 'main', created_at: '2025-01-01T00:00:00Z' },
-  { id: 2, username: 'foreman', full_name: 'Сергеев Дмитрий', role: 'foreman', is_active: true, portal_id: 'main', created_at: '2025-03-15T00:00:00Z' },
+  { id: 2, username: 'foreman', full_name: 'Сергеев Дмитрий', role: 'foreman', is_active: true, portal_id: 'main', created_at: '2025-03-15T00:00:00Z', project_ids: [1] },
+];
+
+/** Связь user ↔ object (many-to-many) */
+interface UserObject {
+  id: number;
+  user_id: number;
+  object_id: number;
+}
+
+const DEMO_USER_OBJECTS: UserObject[] = [
+  { id: 1, user_id: 2, object_id: 1 },
 ];
 
 const DEMO_PASSWORDS: Record<string, string> = {
@@ -249,6 +260,8 @@ interface DB {
   invoices: Invoice[];
   paymentLogs: PaymentLog[];
   portals: Portal[];
+  /** Связь user ↔ object (RBAC many-to-many) */
+  userObjects: UserObject[];
   currentUserId: number | null;
   /** Портал текущей сессии (для изоляции данных по порталу) */
   currentPortalId: string;
@@ -275,6 +288,7 @@ function defaultDB(): DB {
     invoices: [],
     paymentLogs: [],
     portals: structuredClone(DEMO_PORTALS),
+    userObjects: structuredClone(DEMO_USER_OBJECTS),
     currentUserId: null,
     currentPortalId: DEFAULT_PORTAL_ID,
     customExpenseCategories: {},
@@ -316,6 +330,7 @@ class MockStore {
           if (!parsed.invoices) parsed.invoices = [];
           if (!parsed.paymentLogs) parsed.paymentLogs = [];
           if (!parsed.portals) parsed.portals = structuredClone(DEMO_PORTALS);
+          if (!parsed.userObjects) parsed.userObjects = structuredClone(DEMO_USER_OBJECTS);
           if (parsed.currentPortalId == null) parsed.currentPortalId = DEFAULT_PORTAL_ID;
           if (typeof parsed.customExpenseCategories !== 'object') parsed.customExpenseCategories = {};
           parsed.users?.forEach((u: User) => { if (u.portal_id == null && u.role !== 'superAdmin') u.portal_id = DEFAULT_PORTAL_ID; });
@@ -352,6 +367,19 @@ class MockStore {
   /* ================================================================
      AUTH
      ================================================================ */
+  private getUserProjectIds(userId: number): number[] {
+    return this.db.userObjects
+      .filter((uo) => uo.user_id === userId)
+      .map((uo) => uo.object_id);
+  }
+
+  private enrichUser(user: User): User {
+    if (user.role === 'foreman') {
+      return { ...user, project_ids: this.getUserProjectIds(user.id) };
+    }
+    return { ...user };
+  }
+
   login(username: string, password: string): LoginResponse {
     const user = this.db.users.find((u) => u.username === username);
     if (!user || this.db.passwords[username] !== password) {
@@ -363,7 +391,7 @@ class MockStore {
     return {
       access_token: `mock-token-${user.id}-${Date.now()}`,
       token_type: 'bearer',
-      user,
+      user: this.enrichUser(user),
     };
   }
 
@@ -432,7 +460,7 @@ class MockStore {
   getMe(): User {
     const user = this.db.users.find((u) => u.id === this.db.currentUserId);
     if (!user) throw new Error('Не авторизован');
-    return user;
+    return this.enrichUser(user);
   }
 
   updateProfile(data: { full_name: string }): User {
@@ -460,14 +488,27 @@ class MockStore {
      ================================================================ */
   getProjects(): Project[] {
     const portalId = this.db.currentPortalId ?? DEFAULT_PORTAL_ID;
-    return this.db.projects
-      .filter((x) => (x.portal_id ?? DEFAULT_PORTAL_ID) === portalId)
-      .map((x) => ({ ...x }));
+    const user = this.db.users.find((u) => u.id === this.db.currentUserId);
+    let projects = this.db.projects
+      .filter((x) => (x.portal_id ?? DEFAULT_PORTAL_ID) === portalId);
+
+    if (user?.role === 'foreman') {
+      const allowedIds = this.getUserProjectIds(user.id);
+      projects = projects.filter((p) => allowedIds.includes(p.id));
+    }
+    return projects.map((x) => ({ ...x }));
   }
+
   getProject(id: number): Project {
     const portalId = this.db.currentPortalId ?? DEFAULT_PORTAL_ID;
     const p = this.db.projects.find((x) => x.id === id && (x.portal_id ?? DEFAULT_PORTAL_ID) === portalId);
     if (!p) throw new Error('Объект не найден');
+
+    const user = this.db.users.find((u) => u.id === this.db.currentUserId);
+    if (user?.role === 'foreman') {
+      const allowedIds = this.getUserProjectIds(user.id);
+      if (!allowedIds.includes(id)) throw new Error('Нет доступа к этому объекту');
+    }
     return { ...p };
   }
   createProject(data: ProjectCreate): Project {
@@ -833,35 +874,60 @@ class MockStore {
   /* ================================================================
      EMPLOYEES
      ================================================================ */
-  getEmployees(): Employee[] { return [...this.db.employees]; }
+  private enrichEmployee(emp: Employee): Employee {
+    const ids = this.getUserProjectIds(emp.id);
+    return { ...emp, project_ids: ids };
+  }
+
+  private setUserObjects(userId: number, objectIds: number[]): void {
+    this.db.userObjects = this.db.userObjects.filter((uo) => uo.user_id !== userId);
+    for (const oid of objectIds) {
+      this.db.userObjects.push({ id: genId(), user_id: userId, object_id: oid });
+    }
+  }
+
+  getEmployees(): Employee[] {
+    return this.db.employees.map((e) => this.enrichEmployee(e));
+  }
+
   getEmployee(id: number): Employee {
     const e = this.db.employees.find((x) => x.id === id);
     if (!e) throw new Error('Сотрудник не найден');
-    return { ...e };
+    return this.enrichEmployee(e);
   }
+
   createEmployee(data: EmployeeCreate): Employee {
     if (this.db.employees.some((e) => e.username === data.username) ||
         this.db.users.some((u) => u.username === data.username)) {
       throw new Error('Логин уже занят');
     }
+    const portalId = this.db.currentPortalId ?? DEFAULT_PORTAL_ID;
     const emp: Employee = {
       id: genId(), username: data.username, full_name: data.full_name,
-      role: data.role, is_active: true, portal_id: 'main',
+      role: data.role, is_active: true, portal_id: portalId,
       created_at: new Date().toISOString(),
     };
     this.db.employees.push(emp);
     this.db.users.push({
       id: emp.id, username: emp.username, full_name: emp.full_name,
-      role: emp.role, is_active: true,
+      role: emp.role, is_active: true, portal_id: portalId,
     });
     this.db.passwords[emp.username] = data.password;
+
+    if (data.role === 'foreman' && data.project_ids) {
+      this.setUserObjects(emp.id, data.project_ids);
+    }
     this.save();
-    return { ...emp };
+    return this.enrichEmployee(emp);
   }
-  updateEmployee(id: number, data: Partial<EmployeeCreate>): Employee {
+
+  updateEmployee(id: number, data: Partial<EmployeeCreate> & { is_active?: boolean }): Employee {
     const idx = this.db.employees.findIndex((x) => x.id === id);
     if (idx === -1) throw new Error('Сотрудник не найден');
     const emp = this.db.employees[idx];
+
+    const targetRole = data.role ?? emp.role;
+
     if (data.username && data.username !== emp.username) {
       if (this.db.employees.some((e) => e.id !== id && e.username === data.username)) {
         throw new Error('Логин уже занят');
@@ -872,18 +938,33 @@ class MockStore {
     if (data.password && !data.username) {
       this.db.passwords[emp.username] = data.password;
     }
-    const { password: _pw, ...rest } = data as EmployeeCreate & { password?: string };
+
+    if (data.is_active !== undefined) emp.is_active = data.is_active;
+    const { password: _pw, project_ids, is_active: _ia, ...rest } = data as EmployeeCreate & { password?: string; is_active?: boolean };
     Object.assign(emp, rest);
+
+    if (project_ids !== undefined) {
+      this.setUserObjects(id, targetRole === 'foreman' ? project_ids : []);
+    } else if (data.role !== undefined && data.role !== 'foreman') {
+      this.setUserObjects(id, []);
+    }
+
     const user = this.db.users.find((u) => u.id === id);
-    if (user) Object.assign(user, rest);
+    if (user) {
+      Object.assign(user, rest);
+      if (data.is_active !== undefined) user.is_active = data.is_active;
+    }
+
     this.save();
-    return { ...emp };
+    return this.enrichEmployee(emp);
   }
+
   deleteEmployee(id: number): void {
     const emp = this.db.employees.find((e) => e.id === id);
     if (emp) delete this.db.passwords[emp.username];
     this.db.employees = this.db.employees.filter((x) => x.id !== id);
     this.db.users = this.db.users.filter((u) => u.id !== id);
+    this.db.userObjects = this.db.userObjects.filter((uo) => uo.user_id !== id);
     this.save();
   }
 

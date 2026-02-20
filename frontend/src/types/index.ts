@@ -29,6 +29,8 @@ export interface User {
   is_active: boolean;
   /** Идентификатор портала (для мультитенантности; при регистрации создаётся свой портал) */
   portal_id?: string;
+  /** ID объектов, к которым имеет доступ (актуально для foreman) */
+  project_ids?: number[];
 }
 
 /* ---- Объект (проект) ---- */
@@ -232,6 +234,8 @@ export interface Employee {
   is_active: boolean;
   portal_id: string;
   created_at: string;
+  /** ID назначенных объектов (для foreman) */
+  project_ids?: number[];
 }
 
 export interface EmployeeCreate {
@@ -239,6 +243,8 @@ export interface EmployeeCreate {
   password: string;
   full_name: string;
   role: UserRole;
+  /** ID назначенных объектов (обязательно для foreman) */
+  project_ids?: number[];
 }
 
 /* ---- Тип организации ---- */

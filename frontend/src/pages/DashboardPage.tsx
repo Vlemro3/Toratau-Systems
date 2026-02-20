@@ -35,7 +35,7 @@ function matchSearch(project: Project, q: string) {
 }
 
 export function DashboardPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isForeman } = useAuth();
   const { subscription } = useSubscription();
   const navigate = useNavigate();
   const [items, setItems] = useState<ProjectWithMetrics[]>([]);
@@ -167,7 +167,10 @@ export function DashboardPage() {
       )}
 
       {filtered.length === 0 && !showArchive ? (
-        <EmptyState message="Активных объектов нет" icon="🏗️" />
+        <EmptyState
+          message={isForeman ? 'Вам пока не назначены объекты. Обратитесь к администратору.' : 'Активных объектов нет'}
+          icon="🏗️"
+        />
       ) : (
         <>
           {/* Мобильные карточки — активные */}

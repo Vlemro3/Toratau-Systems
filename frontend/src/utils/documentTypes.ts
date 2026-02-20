@@ -8,7 +8,7 @@ export const DOC_CATEGORIES = ['Договоры', 'Акты', 'Бухгалте
 
 export const DOCUMENT_TYPES: DocTypeInfo[] = [
   // Договоры
-  { id: 'contract_sale', name: 'Договор купли-продажи и поставки товара', category: 'Договоры' },
+  { id: 'contract_sale', name: 'Договор подряда', category: 'Договоры' },
   { id: 'contract_spec', name: 'Спецификация к договору', category: 'Договоры' },
   // Акты
   { id: 'act_acceptance', name: 'Акт о сдаче-приемке выполненных работ', category: 'Акты' },

@@ -16,6 +16,7 @@ interface AuthContextType {
   setUser: (u: User) => void;
   isAdmin: boolean;
   isSuperAdmin: boolean;
+  isForeman: boolean;
 }
 
 export const AuthContext = createContext<AuthContextType>({
@@ -28,6 +29,7 @@ export const AuthContext = createContext<AuthContextType>({
   setUser: () => {},
   isAdmin: false,
   isSuperAdmin: false,
+  isForeman: false,
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -77,9 +79,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isAdmin = user?.role === 'admin';
   const isSuperAdmin = user?.role === 'superAdmin';
+  const isForeman = user?.role === 'foreman';
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout, setUser, isAdmin, isSuperAdmin }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, logout, setUser, isAdmin, isSuperAdmin, isForeman }}>
       {children}
     </AuthContext.Provider>
   );

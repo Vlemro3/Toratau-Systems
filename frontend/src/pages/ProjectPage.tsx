@@ -62,7 +62,7 @@ export function ProjectPage() {
   const { id } = useParams<{ id: string }>();
   const projectId = id ? Number(id) : NaN;
   const location = useLocation();
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
   const section = sectionFromPath(location.pathname);
 
   // Validate project ID
@@ -78,6 +78,7 @@ export function ProjectPage() {
   const [payouts, setPayouts] = useState<Payout[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [accessDenied, setAccessDenied] = useState(false);
 
   const [confirmAction, setConfirmAction] = useState<{
     title: string; message: string; action: () => Promise<void>;
@@ -96,11 +97,28 @@ export function ProjectPage() {
       setProject(proj); setReport(rep); setWorkLogs(wl);
       setCashIns(ci); setExpenses(exp); setPayouts(pay);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка загрузки');
+      const msg = err instanceof Error ? err.message : 'Ошибка загрузки';
+      if (msg.includes('Нет доступа')) {
+        setAccessDenied(true);
+      } else {
+        setError(msg);
+      }
     } finally { setLoading(false); }
   }, [projectId]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  if (accessDenied) {
+    return (
+      <div className="page" style={{ textAlign: 'center', padding: '64px 16px' }}>
+        <h2 style={{ fontSize: '48px', margin: '0 0 16px' }}>403</h2>
+        <p className="text-muted" style={{ fontSize: '18px' }}>У вас нет доступа к этому объекту</p>
+        <Link to="/dashboard" className="btn btn--primary" style={{ marginTop: '16px' }}>
+          На главную
+        </Link>
+      </div>
+    );
+  }
 
   const askDelete = (title: string, message: string, action: () => Promise<void>) => {
     setConfirmAction({ title, message, action: async () => { await action(); await loadAll(); } });

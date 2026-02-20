@@ -13,7 +13,7 @@ interface Props {
 }
 
 export function ProtectedRoute({ children, requiredRole }: Props) {
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
 
   if (loading) {
     return <LoadingSpinner />;
@@ -23,10 +23,14 @@ export function ProtectedRoute({ children, requiredRole }: Props) {
     return <Navigate to="/login" replace />;
   }
 
+  if (!user.is_active) {
+    logout();
+    return <Navigate to="/login" replace />;
+  }
+
   if (requiredRole && user.role !== requiredRole) {
-    // SuperAdmin может иметь доступ к admin-маршрутам
     if (requiredRole === 'admin' && user.role === 'superAdmin') {
-      // Разрешаем доступ
+      // SuperAdmin может иметь доступ к admin-маршрутам
     } else {
       return <Navigate to="/dashboard" replace />;
     }
