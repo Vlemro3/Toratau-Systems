@@ -15,16 +15,25 @@ interface Props {
   onClose: () => void;
 }
 
-/** Пункты меню объекта */
-const PROJECT_ITEMS = [
-  { path: '',         icon: '📊', label: 'Сводка' },
-  { path: '/works',   icon: '🔨', label: 'Работы' },
+/** Пункты меню объекта для Администратора */
+const PROJECT_ITEMS_ADMIN = [
+  { path: '', icon: '📊', label: 'Сводка' },
+  { path: '/works', icon: '🔨', label: 'Работы' },
   { path: '/expenses-payouts', icon: '💸', label: 'Расходы и выплаты' },
-  { path: '/payments',icon: '💰', label: 'Платежи' },
+  { path: '/payments', icon: '💰', label: 'Платежи' },
+];
+
+/** Пункты меню объекта для Прораба: Сводка, Работы, Расходы, Выплаты (без Платежей) */
+const PROJECT_ITEMS_FOREMAN = [
+  { path: '', icon: '📊', label: 'Сводка' },
+  { path: '/works', icon: '🔨', label: 'Работы' },
+  { path: '/expenses', icon: '🧾', label: 'Расходы' },
+  { path: '/payouts', icon: '💸', label: 'Выплаты' },
 ];
 
 export function Sidebar({ open, onClose }: Props) {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isForeman } = useAuth();
+  const projectItems = isForeman ? PROJECT_ITEMS_FOREMAN : PROJECT_ITEMS_ADMIN;
   const location = useLocation();
 
   /* projectId из URL (приоритет) или из localStorage (резерв) */
@@ -52,7 +61,7 @@ export function Sidebar({ open, onClose }: Props) {
           {projectId ? (
             <>
               <div className="sidebar__section-title">Объект</div>
-              {PROJECT_ITEMS.map((item) => {
+              {projectItems.map((item) => {
                 const to = `/projects/${projectId}${item.path}`;
                 const isExact = item.path === '';
                 return (
@@ -82,6 +91,12 @@ export function Sidebar({ open, onClose }: Props) {
             <NavLink to="/rates" className={linkClass} onClick={onClose}>
               <span className="sidebar__icon">📋</span>
               <span className="sidebar__text">Расценки</span>
+            </NavLink>
+          )}
+          {isAdmin && (
+            <NavLink to="/estimates" end className={linkClass} onClick={onClose}>
+              <span className="sidebar__icon">📐</span>
+              <span className="sidebar__text">Сметы</span>
             </NavLink>
           )}
           {isAdmin && (

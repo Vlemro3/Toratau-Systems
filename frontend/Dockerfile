@@ -4,6 +4,10 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
 COPY . .
+ARG VITE_API_URL=/api
+ARG VITE_MOCK=false
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_MOCK=$VITE_MOCK
 RUN npm run build
 
 # --- Стадия 2: Nginx для раздачи статики ---

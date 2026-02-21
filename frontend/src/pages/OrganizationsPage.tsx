@@ -1,9 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { getOrganizations, deleteOrganization } from '../api/organizations';
 import { DataTable, type Column } from '../components/DataTable';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import type { Organization } from '../types';
+
+const IconEdit = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" />
+  </svg>
+);
 
 const ORG_TYPE_LABELS: Record<string, string> = {
   ip: 'ИП',
@@ -76,10 +82,10 @@ export function OrganizationsPage() {
             <td>{org.inn || '—'}</td>
             <td>{org.phone || '—'}</td>
             <td>{org.email || '—'}</td>
-            <td className="td-actions">
-              <button className="btn-icon" title="Редактировать" onClick={() => navigate(`/organizations/${org.id}/edit`)}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-              </button>
+            <td>
+              <div className="table-actions">
+                <Link to={`/organizations/${org.id}/edit`} className="table-action table-action--edit" title="Редактировать"><IconEdit /></Link>
+              </div>
             </td>
           </tr>
         )}

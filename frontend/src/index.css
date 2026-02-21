@@ -861,6 +861,34 @@ img {
   border-bottom-color: var(--color-primary);
 }
 
+.tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 10px 16px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: all 0.15s ease;
+}
+
+.tab:hover:not(:disabled) {
+  color: var(--color-text);
+}
+
+.tab--active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: 600;
+}
+
+.tab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .tab-content {
   min-height: 200px;
 }
@@ -1398,6 +1426,16 @@ img {
   align-items: center;
   justify-content: center;
   padding: 24px;
+}
+
+.modal-overlay--center {
+  align-items: center;
+  justify-content: center;
+.modal--opaque {
+  background: #fff;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
 }
 
 .modal {
@@ -2238,6 +2276,14 @@ img {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 12px;
+  margin-bottom: 20px;
+}
+
+.dash-quick-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
   margin-bottom: 20px;
 }
 

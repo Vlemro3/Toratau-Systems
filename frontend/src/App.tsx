@@ -35,6 +35,10 @@ import { CounterpartyDocumentsPage } from './pages/CounterpartyDocumentsPage';
 import { DocumentFormPage } from './pages/DocumentFormPage';
 import { DocumentTemplatesPage } from './pages/DocumentTemplatesPage';
 import { BillingPage } from './pages/BillingPage';
+import { EstimatesListPage } from './pages/estimates/EstimatesListPage';
+import { EstimateCreatePage } from './pages/estimates/EstimateCreatePage';
+import { EstimateViewPage } from './pages/estimates/EstimateViewPage';
+import { EstimateSettingsPage } from './pages/estimates/EstimateSettingsPage';
 import { SuperAdminDashboard } from './modules/super-admin/pages/SuperAdminDashboard';
 import { PortalsListPage } from './modules/super-admin/pages/PortalsListPage';
 import { PortalDetailsPage } from './modules/super-admin/pages/PortalDetailsPage';
@@ -160,6 +164,20 @@ export default function App() {
             {/* Шаблоны документов */}
             <Route path="/document-templates" element={
               <ProtectedRoute requiredRole="admin"><DocumentTemplatesPage /></ProtectedRoute>
+            } />
+
+            {/* Модуль «Смета» */}
+            <Route path="/estimates" element={
+              <ProtectedRoute requiredRole="admin"><EstimatesListPage /></ProtectedRoute>
+            } />
+            <Route path="/estimates/new" element={
+              <ProtectedRoute requiredRole="admin"><EstimateCreatePage /></ProtectedRoute>
+            } />
+            <Route path="/estimates/settings" element={
+              <ProtectedRoute requiredRole="admin"><EstimateSettingsPage /></ProtectedRoute>
+            } />
+            <Route path="/estimates/:id" element={
+              <ProtectedRoute requiredRole="admin"><EstimateViewPage /></ProtectedRoute>
             } />
 
             {/* Оплата и подписка */}

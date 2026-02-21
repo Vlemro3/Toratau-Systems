@@ -24,7 +24,7 @@ import {
 } from '../utils/constants';
 import type { Project, ProjectReport, WorkLog, CashIn, Expense, Payout } from '../types';
 
-type Section = 'summary' | 'works' | 'expenses-payouts' | 'payments';
+type Section = 'summary' | 'works' | 'expenses-payouts' | 'payments' | 'expenses' | 'payouts';
 
 function sectionFromPath(pathname: string): Section {
   const parts = pathname.split('/');
@@ -33,9 +33,8 @@ function sectionFromPath(pathname: string): Section {
     '': 'summary', works: 'works',
     'expenses-payouts': 'expenses-payouts',
     payments: 'payments',
-    // Поддержка старых маршрутов для обратной совместимости
-    payouts: 'expenses-payouts',
-    expenses: 'expenses-payouts',
+    expenses: 'expenses',
+    payouts: 'payouts',
   };
   return map[last] || 'summary';
 }
@@ -44,6 +43,8 @@ const SECTION_TITLES: Record<Section, string> = {
   summary: 'Сводка', works: 'Работы',
   'expenses-payouts': 'Расходы и выплаты',
   payments: 'Платежи',
+  expenses: 'Расходы',
+  payouts: 'Выплаты',
 };
 
 const IconEdit = () => (
@@ -62,7 +63,7 @@ export function ProjectPage() {
   const { id } = useParams<{ id: string }>();
   const projectId = id ? Number(id) : NaN;
   const location = useLocation();
-  const { isAdmin, user } = useAuth();
+  const { isAdmin, isForeman } = useAuth();
   const section = sectionFromPath(location.pathname);
 
   // Validate project ID
@@ -167,11 +168,13 @@ export function ProjectPage() {
 
       {section === 'summary' && (
         report
-          ? <SummaryDashboard project={project} report={report} workLogs={workLogs} cashIns={cashIns} expenses={expenses} payouts={payouts} />
+          ? <SummaryDashboard project={project} report={report} workLogs={workLogs} cashIns={cashIns} expenses={expenses} payouts={payouts} isForeman={isForeman} />
           : <EmptyState message="Данные загружаются..." icon="📊" />
       )}
       {section === 'works' && <WorksSection projectId={projectId} workLogs={workLogs} isAdmin={isAdmin} onDelete={askDelete} onDeleteMany={(ids) => askDeleteMany('Удалить работы?', ids, deleteWorkLog)} />}
       {section === 'expenses-payouts' && <ExpensesAndPayoutsSection projectId={projectId} expenses={expenses} payouts={payouts} isAdmin={isAdmin} onDelete={askDelete} onDeleteMany={askDeleteMany} />}
+      {section === 'expenses' && <ExpensesAndPayoutsSection projectId={projectId} expenses={expenses} payouts={payouts} isAdmin={isAdmin} onDelete={askDelete} onDeleteMany={askDeleteMany} mode="expenses" />}
+      {section === 'payouts' && <ExpensesAndPayoutsSection projectId={projectId} expenses={expenses} payouts={payouts} isAdmin={isAdmin} onDelete={askDelete} onDeleteMany={askDeleteMany} mode="payouts" />}
       {section === 'payments' && <PaymentsSection projectId={projectId} cashIns={cashIns} isAdmin={isAdmin} onDelete={askDelete} onDeleteMany={(ids) => askDeleteMany('Удалить платежи?', ids, deleteCashIn)} />}
 
       <ConfirmDialog
@@ -187,12 +190,13 @@ export function ProjectPage() {
 interface SummaryProps {
   project: Project; report: ProjectReport;
   workLogs: WorkLog[]; cashIns: CashIn[]; expenses: Expense[]; payouts: Payout[];
+  isForeman?: boolean;
 }
 
 // Constants
 const MS_PER_DAY = 86400000;
 
-function SummaryDashboard({ project, report, workLogs, cashIns, expenses, payouts }: SummaryProps) {
+function SummaryDashboard({ project, report, workLogs, cashIns, expenses, payouts, isForeman }: SummaryProps) {
   const now = useMemo(() => new Date(), []);
   const daysLeft = useMemo(() => {
     return project.end_date ? Math.ceil((new Date(project.end_date).getTime() - now.getTime()) / MS_PER_DAY) : null;
@@ -200,6 +204,32 @@ function SummaryDashboard({ project, report, workLogs, cashIns, expenses, payout
   const daysPassed = useMemo(() => {
     return Math.ceil((now.getTime() - new Date(project.start_date).getTime()) / MS_PER_DAY);
   }, [project.start_date, now]);
+
+  /* Аналитика для Прораба: выплаты по бригадам, расходы, объём по видам работ */
+  const payoutsByCrew = useMemo(() => {
+    const byCrew: Record<number, { name: string; total: number }> = {};
+    payouts.forEach((p) => {
+      const id = p.crew_id;
+      if (!byCrew[id]) byCrew[id] = { name: p.crew?.name || `Бригада #${id}`, total: 0 };
+      byCrew[id].total += p.amount;
+    });
+    return Object.entries(byCrew).map(([id, v]) => ({ crewId: Number(id), name: v.name, total: v.total }));
+  }, [payouts]);
+  const expensesTotal = useMemo(() => expenses.reduce((s, e) => s + e.amount, 0), [expenses]);
+  const expensesByCategory = useMemo(() => {
+    const byCat: Record<string, number> = {};
+    expenses.forEach((e) => { byCat[e.category] = (byCat[e.category] || 0) + e.amount; });
+    return Object.entries(byCat).map(([cat, amount]) => ({ category: cat, amount }));
+  }, [expenses]);
+  const volumeByWorkType = useMemo(() => {
+    const byType: Record<number, { name: string; unit: string; volume: number }> = {};
+    workLogs.forEach((wl) => {
+      const id = wl.work_type_id;
+      if (!byType[id]) byType[id] = { name: wl.work_type?.name || `Вид #${id}`, unit: wl.work_type?.unit || '', volume: 0 };
+      byType[id].volume += wl.volume;
+    });
+    return Object.entries(byType).map(([id, v]) => ({ workTypeId: Number(id), name: v.name, unit: v.unit, volume: v.volume }));
+  }, [workLogs]);
 
   const allDates = useMemo(() => {
     const dates: { date: string; label: string; who?: string }[] = [];
@@ -226,6 +256,119 @@ function SummaryDashboard({ project, report, workLogs, cashIns, expenses, payout
   const crewShare = report.total_fact_expense > 0 ? (report.total_paid / report.total_fact_expense) * 100 : 0;
   const otherShare = report.total_fact_expense > 0 ? (report.total_expenses / report.total_fact_expense) * 100 : 0;
 
+  /* Кнопки быстрого добавления в Сводке (для Администратора — с платёжом) */
+  const summaryQuickActions = (
+    <div className="dash-quick-actions">
+      <Link to={`/projects/${project.id}/work-logs/new`} className="btn btn--primary btn--sm">+ Добавить работу</Link>
+      <Link to={`/projects/${project.id}/expenses/new`} className="btn btn--primary btn--sm">+ Добавить расход</Link>
+      <Link to={`/projects/${project.id}/payouts/new`} className="btn btn--primary btn--sm">+ Добавить выплату</Link>
+      {!isForeman && (
+        <Link to={`/projects/${project.id}/cashin/new`} className="btn btn--primary btn--sm">+ Добавить платёж</Link>
+      )}
+    </div>
+  );
+
+  /* Сводка для Прораба: аналитика по выплатам, расходам, объёму работ, дням */
+  if (isForeman) {
+    return (
+      <div className="dashboard">
+        <div className="dash-kpis">
+          <KpiCard icon="📅" value={daysLeft !== null ? (daysLeft > 0 ? String(daysLeft) : daysLeft === 0 ? 'Сегодня' : `${Math.abs(daysLeft)} просрочка`) : '—'} label={daysLeft !== null && daysLeft < 0 ? 'Дней просрочки' : 'Дней до сдачи'} alert={daysLeft !== null && daysLeft < 0} />
+          <KpiCard icon="⏱️" value={String(daysPassed)} label="Дней в работе" />
+        </div>
+        {summaryQuickActions}
+        <div className="dash-cols">
+          <div className="dash-card">
+            <h3 className="dash-card__title">Выплаты бригадам</h3>
+            {payoutsByCrew.length === 0 ? (
+              <p className="text-muted" style={{ padding: '12px 0' }}>Нет выплат</p>
+            ) : (
+              <div style={{ fontSize: '0.875rem' }}>
+                {payoutsByCrew.map(({ crewId, name, total }) => (
+                  <div key={crewId} className="summary-row">
+                    <span className="summary-row__label">{name}</span>
+                    <span className="summary-row__value text-bold">{formatMoney(total)}</span>
+                  </div>
+                ))}
+                <hr className="summary-grid__divider" style={{ margin: '8px 0' }} />
+                <div className="summary-row summary-row--bold">
+                  <span className="summary-row__label">Итого выплачено</span>
+                  <span className="summary-row__value">{formatMoney(report.total_paid)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="dash-card">
+            <h3 className="dash-card__title">Расходы</h3>
+            {expensesByCategory.length === 0 ? (
+              <p className="text-muted" style={{ padding: '12px 0' }}>Нет расходов</p>
+            ) : (
+              <div style={{ fontSize: '0.875rem' }}>
+                {expensesByCategory.sort((a, b) => b.amount - a.amount).map(({ category, amount }) => (
+                  <div key={category} className="summary-row">
+                    <span className="summary-row__label">{getExpenseCategoryLabel(category)}</span>
+                    <span className="summary-row__value">{formatMoney(amount)}</span>
+                  </div>
+                ))}
+                <hr className="summary-grid__divider" style={{ margin: '8px 0' }} />
+                <div className="summary-row summary-row--bold">
+                  <span className="summary-row__label">Итого расходов</span>
+                  <span className="summary-row__value">{formatMoney(expensesTotal)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="dash-card">
+            <h3 className="dash-card__title">Выполненный объём работ (по видам)</h3>
+            {volumeByWorkType.length === 0 ? (
+              <p className="text-muted" style={{ padding: '12px 0' }}>Нет данных</p>
+            ) : (
+              <div style={{ fontSize: '0.875rem' }}>
+                {volumeByWorkType.sort((a, b) => b.volume - a.volume).map(({ workTypeId, name, unit, volume }) => (
+                  <div key={workTypeId} className="summary-row">
+                    <span className="summary-row__label">{name}</span>
+                    <span className="summary-row__value">
+                      {volume.toLocaleString('ru-RU')} {unit}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="dash-cols">
+          <div className="dash-card">
+            <h3 className="dash-card__title">Последняя активность</h3>
+            {allDates.length === 0 ? (
+              <p className="text-muted" style={{ padding: '16px 0' }}>Нет записей</p>
+            ) : (
+              <>
+                <div className="dash-timeline">
+                  {allDates.slice(0, 8).map((item, i) => (
+                    <div className="dash-timeline__item" key={i}>
+                      <div className="dash-timeline__dot" />
+                      <div className="dash-timeline__content">
+                        <div className="dash-timeline__text">{item.label}</div>
+                        <div className="dash-timeline__meta">
+                          {formatDate(item.date)} · {item.who ?? '—'}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p style={{ marginTop: 12, marginBottom: 0 }}>
+                  <Link to={`/projects/${project.id}/activity`} className="link">
+                    Все логи за 3 месяца →
+                  </Link>
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="dashboard">
       <div className="dash-kpis">
@@ -234,6 +377,7 @@ function SummaryDashboard({ project, report, workLogs, cashIns, expenses, payout
         <KpiCard icon="💸" value={formatMoney(weekPayoutsSum)} label="Выплат за неделю" />
         <KpiCard icon="🔨" value={formatMoney(weekWorksSum)} label="Работ за неделю" />
       </div>
+      {summaryQuickActions}
       <div className="dash-cols">
         <div className="dash-card"><h3 className="dash-card__title">Финансы</h3><FinanceRows project={project} report={report} /></div>
         <div className="dash-card">
@@ -245,15 +389,43 @@ function SummaryDashboard({ project, report, workLogs, cashIns, expenses, payout
             <BarRow label="Бригады" value={formatMoney(report.total_paid)} pct={crewShare} color="#2563eb" />
             <BarRow label="Прочие" value={formatMoney(report.total_expenses)} pct={otherShare} color="#f59e0b" />
           </div>
-          {expTotal > 0 && (<>
-            <h3 className="dash-card__title" style={{ marginTop: 20 }}>По категориям</h3>
-            <div className="dash-bar-chart">
-              {Object.entries(expByCategory).sort((a, b) => b[1] - a[1]).map(([cat, amount]) => {
-                const colors: Record<string, string> = { materials: '#3b82f6', tools: '#8b5cf6', transport: '#f97316', other: '#6b7280' };
-                return <BarRow key={cat} label={getExpenseCategoryLabel(cat)} value={formatMoney(amount)} pct={(amount / expTotal) * 100} color={colors[cat] || '#6b7280'} />;
-              })}
+        </div>
+        <div className="dash-card">
+          <h3 className="dash-card__title">Аналитика по расходам</h3>
+          {expTotal > 0 ? (
+            <>
+              <div className="dash-bar-chart">
+                {Object.entries(expByCategory).sort((a, b) => b[1] - a[1]).map(([cat, amount]) => {
+                  const colors: Record<string, string> = { materials: '#3b82f6', tools: '#8b5cf6', transport: '#f97316', other: '#6b7280' };
+                  return <BarRow key={cat} label={getExpenseCategoryLabel(cat)} value={formatMoney(amount)} pct={(amount / expTotal) * 100} color={colors[cat] || '#6b7280'} />;
+                })}
+              </div>
+              <hr className="summary-grid__divider" style={{ margin: '12px 0' }} />
+              <div className="summary-row summary-row--bold">
+                <span className="summary-row__label">Итого расходов</span>
+                <span className="summary-row__value">{formatMoney(expTotal)}</span>
+              </div>
+            </>
+          ) : (
+            <p className="text-muted" style={{ padding: '12px 0' }}>Нет расходов</p>
+          )}
+        </div>
+        <div className="dash-card">
+          <h3 className="dash-card__title">Выполненный объём работ (по видам)</h3>
+          {volumeByWorkType.length === 0 ? (
+            <p className="text-muted" style={{ padding: '12px 0' }}>Нет данных</p>
+          ) : (
+            <div style={{ fontSize: '0.875rem' }}>
+              {volumeByWorkType.sort((a, b) => b.volume - a.volume).map(({ workTypeId, name, unit, volume }) => (
+                <div key={workTypeId} className="summary-row">
+                  <span className="summary-row__label">{name}</span>
+                  <span className="summary-row__value">
+                    {volume.toLocaleString('ru-RU')} {unit}
+                  </span>
+                </div>
+              ))}
             </div>
-          </>)}
+          )}
         </div>
       </div>
       <div className="dash-cols">
@@ -409,19 +581,25 @@ function PaymentsSection({ projectId, cashIns, isAdmin, onDelete, onDeleteMany }
   );
 }
 
-function ExpensesAndPayoutsSection({ projectId, expenses, payouts, isAdmin, onDelete, onDeleteMany }: {
+function ExpensesAndPayoutsSection({ projectId, expenses, payouts, isAdmin, onDelete, onDeleteMany, mode = 'all' }: {
   projectId: number; expenses: Expense[]; payouts: Payout[]; isAdmin: boolean; onDelete: DeleteFn; onDeleteMany: (title: string, ids: number[], deleteFn: (id: number) => Promise<void>) => void;
+  /** 'all' — оба блока (для админа), 'expenses' / 'payouts' — один блок (для прораба) */
+  mode?: 'all' | 'expenses' | 'payouts';
 }) {
+  const showExpenses = mode === 'all' || mode === 'expenses';
+  const showPayouts = mode === 'all' || mode === 'payouts';
+
   return (
     <div>
       <div className="tab-header">
-        <Link to={`/projects/${projectId}/expenses/new`} className="btn btn--primary btn--sm">+ Добавить расход</Link>
-        <Link to={`/projects/${projectId}/payouts/new`} className="btn btn--primary btn--sm" style={{ marginLeft: '8px' }}>+ Создать выплату</Link>
+        {showExpenses && <Link to={`/projects/${projectId}/expenses/new`} className="btn btn--primary btn--sm">+ Добавить расход</Link>}
+        {showPayouts && <Link to={`/projects/${projectId}/payouts/new`} className="btn btn--primary btn--sm" style={{ marginLeft: showExpenses ? '8px' : 0 }}>+ Добавить выплату</Link>}
       </div>
 
       {/* Расходы */}
+      {showExpenses && (
       <div style={{ marginBottom: '32px' }}>
-        <h3 style={{ marginBottom: '16px', fontSize: '1.1rem', fontWeight: 600 }}>Расходы</h3>
+        {mode === 'all' && <h3 style={{ marginBottom: '16px', fontSize: '1.1rem', fontWeight: 600 }}>Расходы</h3>}
         <DataTable
           items={expenses}
           columns={[
@@ -453,10 +631,12 @@ function ExpensesAndPayoutsSection({ projectId, expenses, payouts, isAdmin, onDe
           )}
         />
       </div>
+      )}
 
       {/* Выплаты */}
+      {showPayouts && (
       <div>
-        <h3 style={{ marginBottom: '16px', fontSize: '1.1rem', fontWeight: 600 }}>Выплаты</h3>
+        {mode === 'all' && <h3 style={{ marginBottom: '16px', fontSize: '1.1rem', fontWeight: 600 }}>Выплаты</h3>}
         <DataTable
           items={payouts}
           columns={[
@@ -490,6 +670,7 @@ function ExpensesAndPayoutsSection({ projectId, expenses, payouts, isAdmin, onDe
           )}
         />
       </div>
+      )}
     </div>
   );
 }

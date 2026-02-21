@@ -20,21 +20,19 @@ services:
       retries: 5
 
   # --- Backend (FastAPI) ---
-  # Раскомментируйте, когда бэкенд будет готов
-  # backend:
-  #   build: ./backend
-  #   restart: unless-stopped
-  #   ports:
-  #     - "8000:8000"
-  #   depends_on:
-  #     db:
-  #       condition: service_healthy
-  #   environment:
-  #     DATABASE_URL: postgresql://toratau:toratau_secret@db:5432/toratau
-  #     SECRET_KEY: change-me-in-production
-  #     UPLOAD_DIR: /app/uploads
-  #   volumes:
-  #     - uploads:/app/uploads
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://toratau:toratau_secret@db:5432/toratau
+      SECRET_KEY: change-me-in-production
+      SUPERADMIN_LOGIN: superadmin
+      SUPERADMIN_PASSWORD: superadmin123
 
   # --- Frontend (React + Nginx) ---
   frontend:
@@ -42,8 +40,8 @@ services:
     restart: unless-stopped
     ports:
       - "8080:80"
-    # depends_on:
-    #   - backend
+    depends_on:
+      - backend
 
   # --- Ngrok Tunnel (публичный доступ) ---
   # Для использования ngrok:

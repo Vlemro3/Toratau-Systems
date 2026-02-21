@@ -129,7 +129,7 @@ export function PayoutFormPage() {
           <div className="form__actions-right">
             <button type="button" className="btn btn--secondary" onClick={() => navigate(`/projects/${projId}/payouts`)}>Отмена</button>
             <button type="submit" className="btn btn--primary" disabled={saving}>
-              {saving ? 'Сохранение...' : isEdit ? 'Сохранить' : 'Создать выплату'}
+              {saving ? 'Сохранение...' : isEdit ? 'Сохранить' : 'Добавить выплату'}
             </button>
           </div>
         </div>
