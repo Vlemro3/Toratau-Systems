@@ -65,7 +65,10 @@ export function ProjectFormPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
-    setForm((prev) => ({ ...prev, [name]: type === 'number' ? Number(value) : value }));
+    setForm((prev) => ({
+      ...prev,
+      [name]: type === 'number' ? (value === '' ? 0 : Number(value)) : value,
+    }));
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -166,11 +169,11 @@ export function ProjectFormPage() {
         <div className="form-row">
           <div className="form-group">
             <label>Сумма контракта (руб) *</label>
-            <input type="number" name="contract_amount" value={form.contract_amount} onChange={handleChange} min="0" step="0.01" required />
+            <input type="number" name="contract_amount" value={form.contract_amount === 0 ? '' : form.contract_amount} onChange={handleChange} min="0" step="0.01" required />
           </div>
           <div className="form-group">
             <label>Плановая себестоимость (руб) *</label>
-            <input type="number" name="planned_cost" value={form.planned_cost} onChange={handleChange} min="0" step="0.01" required />
+            <input type="number" name="planned_cost" value={form.planned_cost === 0 ? '' : form.planned_cost} onChange={handleChange} min="0" step="0.01" required />
           </div>
         </div>
 

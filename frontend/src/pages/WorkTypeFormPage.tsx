@@ -51,7 +51,7 @@ export function WorkTypeFormPage() {
       ...prev,
       [name]:
         type === 'number'
-          ? Number(value)
+          ? (value === '' ? 0 : Number(value))
           : type === 'checkbox'
             ? (e.target as HTMLInputElement).checked
             : value,
@@ -108,7 +108,7 @@ export function WorkTypeFormPage() {
             <input
               type="number"
               name="rate"
-              value={form.rate}
+              value={form.rate === 0 ? '' : form.rate}
               onChange={handleChange}
               min="0"
               step="0.01"

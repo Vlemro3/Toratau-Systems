@@ -1,7 +1,10 @@
 /**
- * Мок-API модуля «Смета».
- * Эмулирует бэкенд: CRUD смет, парсинг, проверка, генерация ЛСР, сравнение.
+ * API модуля «Смета».
+ * Чтение файлов/проверка/ЛСР/сравнение через бэкенд.
+ * Локальное хранение смет — localStorage (бэкенд не хранит сущности смет).
  */
+
+import { api } from './client';
 
 /* ---- Типы ---- */
 
@@ -22,6 +25,14 @@ export interface EstimatePosition {
   total: number;
   overhead: number;
   profit: number;
+  /** Поправочные коэффициенты */
+  adjustmentCoeff?: string;
+  /** Коэффициенты пересчёта, номер */
+  recalcCoeffNumber?: string;
+  /** ЗТР, всего чел-ч */
+  laborPersonHours?: number;
+  /** Стоим. ед. с нач., руб. */
+  costPerUnitFromStart?: number;
 }
 
 export interface EstimateError {
@@ -83,6 +94,24 @@ export interface CompareResult {
   totalDiff: number;
   marginality: number;
   possibleProfit: number;
+  /** Процент разницы по итогу (для строки ИТОГО), пересчитывается из сумм */
+  totalDiffPct?: number;
+}
+
+/** Пересчитать итоги и возможную прибыль из строк, чтобы избежать ошибок расчёта с бэкенда */
+export function normalizeCompareResult(c: CompareResult): CompareResult {
+  const totalCustomer = c.rows.reduce((s, r) => s + r.customerSum, 0);
+  const totalOur = c.rows.reduce((s, r) => s + r.ourSum, 0);
+  const totalDiff = totalCustomer - totalOur;
+  const possibleProfit = totalDiff;
+  const marginality = totalCustomer > 0 ? Math.round((totalDiff / totalCustomer) * 100) : 0;
+  const totalDiffPct = totalCustomer > 0 ? Math.round((totalDiff / totalCustomer) * 100) : 0;
+  const rows = c.rows.map((r) => ({
+    ...r,
+    diffRub: r.customerSum - r.ourSum,
+    diffPct: r.customerSum > 0 ? Math.round(((r.customerSum - r.ourSum) / r.customerSum) * 100) : 0,
+  }));
+  return { ...c, rows, totalCustomer, totalOur, totalDiff, possibleProfit, marginality, totalDiffPct };
 }
 
 export interface Estimate {
@@ -98,6 +127,8 @@ export interface Estimate {
   lsr: LSRResult | null;
   compare: CompareResult | null;
   strategy: CalcStrategy;
+  /** Исходный загруженный файл (base64) для кнопки «Скачать смету» */
+  fileContentBase64?: string;
 }
 
 export interface EstimateCreate {
@@ -200,12 +231,37 @@ export async function getEstimate(id: number): Promise<Estimate> {
   return est;
 }
 
-export async function createEstimate(data: EstimateCreate): Promise<Estimate> {
-  await delay(300);
+export async function createEstimate(data: EstimateCreate, file?: File, fileContentBase64?: string): Promise<Estimate> {
+  let positions: EstimatePosition[];
+  if (file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('base_type', data.baseType);
+    const res = await api.upload<{ positions: EstimatePosition[] }>('/estimates/parse', formData);
+    positions = (res.positions || []).map((p, i) => ({
+      id: i + 1,
+      num: String(p.num ?? i + 1),
+      normCode: String(p.normCode ?? ''),
+      name: String(p.name ?? ''),
+      unit: String(p.unit ?? ''),
+      volume: Number(p.volume) || 0,
+      price: Number(p.price) || 0,
+      total: Number(p.total) || 0,
+      overhead: Number(p.overhead) || 0,
+      profit: Number(p.profit) || 0,
+      adjustmentCoeff: p.adjustmentCoeff != null ? String(p.adjustmentCoeff) : '',
+      recalcCoeffNumber: p.recalcCoeffNumber != null ? String(p.recalcCoeffNumber) : '',
+      laborPersonHours: Number(p.laborPersonHours) || 0,
+      costPerUnitFromStart: Number(p.costPerUnitFromStart) || 0,
+    }));
+  } else {
+    positions = [];
+  }
   const all = loadEstimates();
-  const positions = generatePositions();
+  const nextId = all.length ? Math.max(...all.map((e) => e.id)) + 1 : 1;
+  nextEstId = nextId;
   const est: Estimate = {
-    id: ++nextEstId,
+    id: nextId,
     name: data.name,
     region: data.region,
     baseType: data.baseType,
@@ -217,6 +273,7 @@ export async function createEstimate(data: EstimateCreate): Promise<Estimate> {
     lsr: null,
     compare: null,
     strategy: 'standard',
+    ...(fileContentBase64 ? { fileContentBase64 } : {}),
   };
   all.push(est);
   saveEstimates(all);
@@ -230,22 +287,14 @@ export async function deleteEstimate(id: number): Promise<void> {
 }
 
 export async function runCheck(id: number): Promise<CheckResult> {
-  await delay(800);
   const all = loadEstimates();
   const est = all.find((e) => e.id === id);
   if (!est) throw new Error('Смета не найдена');
 
-  const totalSum = est.positions.reduce((s, p) => s + p.total + p.overhead + p.profit, 0);
-  const overpricePct = 8 + Math.random() * 12;
-  const result: CheckResult = {
-    totalSum,
-    marketEstimate: totalSum * (1 - overpricePct / 100),
-    potentialOverprice: totalSum * (overpricePct / 100),
-    potentialOverpricePct: Math.round(overpricePct),
-    errorsCount: DEMO_ERRORS.length,
-    riskLevel: overpricePct > 15 ? 'high' : overpricePct > 8 ? 'medium' : 'low',
-    errors: DEMO_ERRORS,
-  };
+  const result = await api.post<CheckResult>('/estimates/check', {
+    positions: est.positions,
+    region: est.region,
+  });
   est.checkResult = result;
   est.status = 'checked';
   saveEstimates(all);
@@ -253,39 +302,15 @@ export async function runCheck(id: number): Promise<CheckResult> {
 }
 
 export async function generateLSR(id: number): Promise<LSRResult> {
-  await delay(600);
   const all = loadEstimates();
   const est = all.find((e) => e.id === id);
   if (!est) throw new Error('Смета не найдена');
 
-  const strategyMultiplier = est.strategy === 'aggressive' ? 0.82 : est.strategy === 'conservative' ? 0.93 : 0.88;
-
-  const lsrPositions: LSRPosition[] = est.positions.map((p, i) => {
-    const marketPrice = p.price * strategyMultiplier;
-    const direct = marketPrice * p.volume;
-    const materials = direct * 0.55;
-    const labor = direct * 0.3;
-    const machines = direct * 0.15;
-    const overhead = direct * 0.1;
-    const profit = direct * 0.08;
-    return {
-      id: i + 1, num: p.num, name: p.name, unit: p.unit, volume: p.volume,
-      materials: Math.round(materials), labor: Math.round(labor), machines: Math.round(machines),
-      directCost: Math.round(direct), overhead: Math.round(overhead), profit: Math.round(profit),
-      total: Math.round(direct + overhead + profit),
-    };
+  const result = await api.post<LSRResult>('/estimates/lsr', {
+    positions: est.positions,
+    strategy: est.strategy,
   });
-
-  const result: LSRResult = {
-    positions: lsrPositions,
-    totalDirect: lsrPositions.reduce((s, p) => s + p.directCost, 0),
-    totalMaterials: lsrPositions.reduce((s, p) => s + p.materials, 0),
-    totalLabor: lsrPositions.reduce((s, p) => s + p.labor, 0),
-    totalMachines: lsrPositions.reduce((s, p) => s + p.machines, 0),
-    totalOverhead: lsrPositions.reduce((s, p) => s + p.overhead, 0),
-    totalProfit: lsrPositions.reduce((s, p) => s + p.profit, 0),
-    grandTotal: lsrPositions.reduce((s, p) => s + p.total, 0),
-  };
+  result.positions = (result.positions || []).map((p, i) => ({ ...p, id: i + 1 }));
   est.lsr = result;
   est.status = 'lsr_ready';
   saveEstimates(all);
@@ -293,36 +318,19 @@ export async function generateLSR(id: number): Promise<LSRResult> {
 }
 
 export async function runCompare(id: number): Promise<CompareResult> {
-  await delay(500);
   const all = loadEstimates();
   const est = all.find((e) => e.id === id);
   if (!est || !est.lsr) throw new Error('Сначала сформируйте ЛСР');
 
-  const rows: CompareRow[] = est.positions.map((p) => {
-    const lsrPos = est.lsr!.positions.find((lp) => lp.num === p.num);
-    const customerSum = p.total + p.overhead + p.profit;
-    const ourSum = lsrPos?.total ?? 0;
-    const diff = customerSum - ourSum;
-    return {
-      num: p.num, name: p.name, customerSum, ourSum,
-      diffRub: diff, diffPct: customerSum > 0 ? Math.round((diff / customerSum) * 100) : 0,
-    };
+  const result = await api.post<CompareResult>('/estimates/compare', {
+    positions: est.positions,
+    lsr: est.lsr,
   });
-
-  const totalCustomer = rows.reduce((s, r) => s + r.customerSum, 0);
-  const totalOur = rows.reduce((s, r) => s + r.ourSum, 0);
-  const result: CompareResult = {
-    rows,
-    totalCustomer,
-    totalOur,
-    totalDiff: totalCustomer - totalOur,
-    marginality: totalCustomer > 0 ? Math.round(((totalCustomer - totalOur) / totalCustomer) * 100) : 0,
-    possibleProfit: totalCustomer - totalOur,
-  };
-  est.compare = result;
+  const normalized = normalizeCompareResult(result);
+  est.compare = normalized;
   est.status = 'compared';
   saveEstimates(all);
-  return result;
+  return normalized;
 }
 
 export async function setStrategy(id: number, strategy: CalcStrategy): Promise<void> {
@@ -334,6 +342,40 @@ export async function setStrategy(id: number, strategy: CalcStrategy): Promise<v
   est.lsr = null;
   est.compare = null;
   if (est.status === 'lsr_ready' || est.status === 'compared') est.status = 'checked';
+  saveEstimates(all);
+}
+
+/** Сохранить изменения ЛСР (позиции и итоги) в смету */
+export async function updateEstimateLSR(id: number, lsr: LSRResult): Promise<void> {
+  await delay();
+  const all = loadEstimates();
+  const est = all.find((e) => e.id === id);
+  if (!est) throw new Error('Смета не найдена');
+  est.lsr = lsr;
+  saveEstimates(all);
+}
+
+/** Сохранить изменения позиций сметы */
+export async function updateEstimatePositions(id: number, positions: EstimatePosition[]): Promise<void> {
+  await delay();
+  const all = loadEstimates();
+  const est = all.find((e) => e.id === id);
+  if (!est) throw new Error('Смета не найдена');
+  est.positions = positions;
+  est.checkResult = null;
+  est.lsr = null;
+  est.compare = null;
+  if (est.status !== 'parsed' && est.status !== 'draft') est.status = 'parsed';
+  saveEstimates(all);
+}
+
+/** Сохранить изменения сравнения (итоги пересчитываются из строк) */
+export async function updateEstimateCompare(id: number, compare: CompareResult): Promise<void> {
+  await delay();
+  const all = loadEstimates();
+  const est = all.find((e) => e.id === id);
+  if (!est) throw new Error('Смета не найдена');
+  est.compare = normalizeCompareResult(compare);
   saveEstimates(all);
 }
 
@@ -391,6 +433,9 @@ export const REGIONS = [
   'Ненецкий автономный округ', 'Ханты-Мансийский автономный округ — Югра', 'Чукотский автономный округ', 'Ямало-Ненецкий автономный округ',
 ];
 
+/** Регионы в алфавитном порядке для отображения в формах */
+export const REGIONS_SORTED = [...REGIONS].sort((a, b) => a.localeCompare(b, 'ru'));
+
 export const RISK_LABELS: Record<RiskLevel, string> = { low: 'Низкий', medium: 'Средний', high: 'Высокий' };
 export const RISK_COLORS: Record<RiskLevel, string> = { low: '#16a34a', medium: '#eab308', high: '#dc2626' };
 export const ERROR_TYPE_LABELS: Record<ErrorSeverity, string> = {
@@ -419,11 +464,27 @@ function triggerDownload(content: string, filename: string, mime: string) {
   URL.revokeObjectURL(url);
 }
 
+/** Скачать исходный загруженный файл сметы или, если его нет, CSV с позициями */
 export function downloadEstimatePositions(est: Estimate): void {
+  if (est.fileContentBase64) {
+    const binary = atob(est.fileContentBase64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const ext = (est.fileName || '').split('.').pop()?.toLowerCase();
+    const mime = ext === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : ext === 'xls' ? 'application/vnd.ms-excel' : ext === 'xml' ? 'application/xml' : 'application/octet-stream';
+    const blob = new Blob([bytes], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = est.fileName || 'smeta';
+    a.click();
+    URL.revokeObjectURL(url);
+    return;
+  }
   const rows = [
-    ['№', 'Код нормы', 'Наименование', 'Ед. изм', 'Объём', 'Цена', 'Сумма', 'НР', 'СП'].join(';'),
+    ['№пп', 'Шифр, номера нормативов и коды ресурсов', 'Наименование работ и затрат', 'Ед. изм.', 'Кол-во единиц', 'Цена на ед., руб.', 'Поправочные коэф.', 'Коэф. пересчета, номер', 'ВСЕГО затрат, руб.', 'ЗТР, чел-ч', 'Стоим. ед. с нач., руб.', 'НР', 'СП'].join(';'),
     ...est.positions.map((p) =>
-      [p.num, p.normCode, p.name, p.unit, p.volume, p.price, p.total, p.overhead, p.profit].join(';')
+      [p.num, p.normCode, p.name, p.unit, p.volume, p.price, p.adjustmentCoeff ?? '', p.recalcCoeffNumber ?? '', p.total, p.laborPersonHours ?? '', p.costPerUnitFromStart ?? '', p.overhead, p.profit].join(';')
     ),
   ];
   const name = (est.fileName || 'smeta').replace(/\.[^.]+$/, '') || 'smeta';

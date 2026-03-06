@@ -381,9 +381,11 @@ class MockStore {
   }
 
   login(username: string, password: string): LoginResponse {
-    const user = this.db.users.find((u) => u.username === username);
-    if (!user || this.db.passwords[username] !== password) {
-      throw new Error('Неверный логин или пароль');
+    const key = username.toLowerCase();
+    const user = this.db.users.find((u) => u.username.toLowerCase() === key);
+    const storedPassword = user ? this.db.passwords[user.username.toLowerCase()] : undefined;
+    if (!user || storedPassword !== password) {
+      throw new Error('Некорректный логин или пароль');
     }
     this.db.currentUserId = user.id;
     this.db.currentPortalId = user.portal_id ?? DEFAULT_PORTAL_ID;
@@ -396,7 +398,7 @@ class MockStore {
   }
 
   register(data: { username: string; password: string; full_name: string; email: string }): LoginResponse {
-    if (this.db.users.some((u) => u.username === data.username)) {
+    if (this.db.users.some((u) => u.username.toLowerCase() === data.username.toLowerCase())) {
       throw new Error('Пользователь с таким логином уже существует');
     }
     const now = new Date().toISOString();
@@ -424,7 +426,7 @@ class MockStore {
       portal_id: portalId,
     };
     this.db.users.push(user);
-    this.db.passwords[data.username] = data.password;
+    this.db.passwords[data.username.toLowerCase()] = data.password;
 
     const demoProject: Project = {
       id: genId(),
@@ -476,10 +478,11 @@ class MockStore {
   changePassword(data: { current_password: string; new_password: string }): void {
     const user = this.db.users.find((u) => u.id === this.db.currentUserId);
     if (!user) throw new Error('Не авторизован');
-    if (this.db.passwords[user.username] !== data.current_password) {
+    const pkey = user.username.toLowerCase();
+    if (this.db.passwords[pkey] !== data.current_password) {
       throw new Error('Текущий пароль неверен');
     }
-    this.db.passwords[user.username] = data.new_password;
+    this.db.passwords[pkey] = data.new_password;
     this.save();
   }
 
@@ -912,7 +915,7 @@ class MockStore {
       id: emp.id, username: emp.username, full_name: emp.full_name,
       role: emp.role, is_active: true, portal_id: portalId,
     });
-    this.db.passwords[emp.username] = data.password;
+    this.db.passwords[emp.username.toLowerCase()] = data.password;
 
     if (data.role === 'foreman' && data.project_ids) {
       this.setUserObjects(emp.id, data.project_ids);
@@ -928,15 +931,16 @@ class MockStore {
 
     const targetRole = data.role ?? emp.role;
 
-    if (data.username && data.username !== emp.username) {
-      if (this.db.employees.some((e) => e.id !== id && e.username === data.username)) {
+    const newUsername = data.username?.trim();
+    if (newUsername && newUsername !== emp.username) {
+      if (this.db.employees.some((e) => e.id !== id && e.username.toLowerCase() === newUsername.toLowerCase())) {
         throw new Error('Логин уже занят');
       }
-      delete this.db.passwords[emp.username];
-      this.db.passwords[data.username] = data.password || 'temp123';
+      delete this.db.passwords[emp.username.toLowerCase()];
+      this.db.passwords[newUsername.toLowerCase()] = data.password || 'temp123';
     }
     if (data.password && !data.username) {
-      this.db.passwords[emp.username] = data.password;
+      this.db.passwords[emp.username.toLowerCase()] = data.password;
     }
 
     if (data.is_active !== undefined) emp.is_active = data.is_active;
@@ -961,7 +965,7 @@ class MockStore {
 
   deleteEmployee(id: number): void {
     const emp = this.db.employees.find((e) => e.id === id);
-    if (emp) delete this.db.passwords[emp.username];
+    if (emp) delete this.db.passwords[emp.username.toLowerCase()];
     this.db.employees = this.db.employees.filter((x) => x.id !== id);
     this.db.users = this.db.users.filter((u) => u.id !== id);
     this.db.userObjects = this.db.userObjects.filter((uo) => uo.user_id !== id);

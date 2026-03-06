@@ -1,13 +1,9 @@
 /**
  * HTTP-клиент для взаимодействия с бэкендом.
  * Автоматически подставляет JWT-токен и обрабатывает ошибки.
- *
- * Если VITE_MOCK=true — все запросы обрабатываются локальным мок-хранилищем.
  */
-import { handleMockRequest } from './mockStore';
 
 const BASE_URL = import.meta.env.VITE_API_URL || '';
-const USE_MOCK = import.meta.env.VITE_MOCK === 'true';
 
 class ApiClient {
   private getToken(): string | null {
@@ -16,20 +12,6 @@ class ApiClient {
 
   /** Основной метод запроса */
   async request<T>(path: string, options: RequestInit = {}): Promise<T> {
-    const method = options.method || 'GET';
-
-    /* --- Мок-режим: обработка без сервера --- */
-    if (USE_MOCK) {
-      try {
-        const body = typeof options.body === 'string' ? options.body : null;
-        const result = await handleMockRequest(method, path, body);
-        return result as T;
-      } catch (err) {
-        throw err instanceof Error ? err : new Error(String(err));
-      }
-    }
-
-    /* --- Реальный запрос к бэкенду --- */
     const token = this.getToken();
     const headers: Record<string, string> = {
       ...(options.headers as Record<string, string>),

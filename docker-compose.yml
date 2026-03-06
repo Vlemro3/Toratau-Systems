@@ -30,9 +30,11 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://toratau:toratau_secret@db:5432/toratau
-      SECRET_KEY: change-me-in-production
-      SUPERADMIN_LOGIN: superadmin
-      SUPERADMIN_PASSWORD: superadmin123
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      SUPERADMIN_LOGIN: ${SUPERADMIN_LOGIN:-superadmin}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-superadmin123}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_ESTIMATE_MODEL: ${OPENAI_ESTIMATE_MODEL:-gpt-4.1}
 
   # --- Frontend (React + Nginx) ---
   frontend:

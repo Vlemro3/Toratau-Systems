@@ -60,7 +60,10 @@ export function PayoutFormPage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     const isNumeric = type === 'number' || name.endsWith('_id') || name === 'amount';
-    setForm((prev) => ({ ...prev, [name]: isNumeric ? Number(value) : value }));
+    setForm((prev) => ({
+      ...prev,
+      [name]: isNumeric ? (value === '' ? 0 : Number(value)) : value,
+    }));
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -107,7 +110,7 @@ export function PayoutFormPage() {
           </div>
           <div className="form-group">
             <label>Сумма (руб) *</label>
-            <input type="number" name="amount" value={form.amount || ''} onChange={handleChange} min="0.01" step="0.01" required autoFocus />
+            <input type="number" name="amount" value={form.amount === 0 ? '' : form.amount} onChange={handleChange} min="0.01" step="0.01" required autoFocus />
           </div>
         </div>
 

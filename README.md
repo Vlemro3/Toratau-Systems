@@ -48,14 +48,22 @@ npm run dev
 
 Приложение будет доступно на http://localhost:3000
 
-### Docker (вместе с бэкендом)
+### Docker (все сервисы: БД, бэкенд, фронт)
 
-```bash
-docker-compose up --build
-```
+1. В корне проекта создайте `.env` и при необходимости задайте переменные (для смет с нейросетью — ключ OpenAI):
+   ```bash
+   cp .env.example .env
+   # Отредактируйте .env: OPENAI_API_KEY=sk-...
+   ```
 
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
+2. Запуск:
+   ```bash
+   docker-compose up --build
+   ```
+
+- **Frontend:** http://localhost:8080 (логин: admin / admin123)
+- **Backend API:** http://localhost:8000 (health: http://localhost:8000/health)
+- Запросы с фронта к `/api` проксируются на бэкенд. Модуль смет (распознавание, проверка, ЛСР, сравнение) использует OpenAI при заданном `OPENAI_API_KEY` в `.env`.
 
 ## Технологический стек (Frontend)
 

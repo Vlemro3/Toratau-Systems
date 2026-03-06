@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import auth, projects, crews, worktypes, worklogs, payouts, expenses, cashin, expense_categories, reports, employees, superadmin, audit, stubs
+from app.api import auth, projects, crews, worktypes, worklogs, payouts, expenses, cashin, expense_categories, reports, employees, superadmin, audit, stubs, estimates
 
 app = FastAPI(title="Toratau Backend")
 app.add_middleware(
@@ -25,6 +25,7 @@ app.include_router(employees.router)
 app.include_router(superadmin.router)
 app.include_router(audit.router)
 app.include_router(stubs.router)
+app.include_router(estimates.router)
 
 
 @app.get("/health")

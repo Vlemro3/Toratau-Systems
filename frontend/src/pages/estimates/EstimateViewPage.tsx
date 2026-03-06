@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, type SetStateAction } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
-  getEstimate, runCheck, generateLSR, runCompare, setStrategy,
+  getEstimate, runCheck, generateLSR, runCompare, setStrategy, updateEstimateLSR,
+  updateEstimatePositions, updateEstimateCompare, normalizeCompareResult,
   downloadEstimatePositions, downloadLSRWithResult, downloadCompare,
   STATUS_LABELS, STATUS_COLORS, STRATEGY_LABELS,
 } from '../../api/estimates';
-import type { Estimate, CalcStrategy, LSRPosition, LSRResult } from '../../api/estimates';
+import type { Estimate, EstimatePosition, CalcStrategy, LSRPosition, LSRResult, CompareRow } from '../../api/estimates';
 import { getWorkTypes, createWorkType } from '../../api/workTypes';
 import type { WorkType, WorkTypeCreate } from '../../types';
 import { LoadingSpinner } from '../../components/LoadingSpinner';
@@ -28,8 +29,17 @@ export function EstimateViewPage() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState('');
   const [tab, setTab] = useState<Tab>('positions');
+  const [savingLSR, setSavingLSR] = useState(false);
   /** Текущие позиции ЛСР (при редактировании в таблице); при скачивании берём отсюда */
   const [lsrPositions, setLsrPositions] = useState<LSRPosition[] | null>(null);
+  /** Редактируемые позиции сметы (вкладка Позиции) */
+  const [editPositions, setEditPositions] = useState<EstimatePosition[]>([]);
+  const [positionsDirty, setPositionsDirty] = useState(false);
+  const [savingPositions, setSavingPositions] = useState(false);
+  /** Редактируемые строки сравнения (вкладка Сравнение) */
+  const [editCompareRows, setEditCompareRows] = useState<CompareRow[]>([]);
+  const [compareDirty, setCompareDirty] = useState(false);
+  const [savingCompare, setSavingCompare] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -42,6 +52,14 @@ export function EstimateViewPage() {
     if (est?.lsr) setLsrPositions(est.lsr.positions.map((p) => ({ ...p })));
     else setLsrPositions(null);
   }, [est?.id, est?.lsr]);
+
+  useEffect(() => {
+    if (est && !positionsDirty) setEditPositions(est.positions.map((p) => ({ ...p })));
+  }, [est?.id, est?.positions, positionsDirty]);
+
+  useEffect(() => {
+    if (est?.compare && !compareDirty) setEditCompareRows(est.compare.rows.map((r) => ({ ...r })));
+  }, [est?.id, est?.compare, compareDirty]);
 
   /** Обёртка для LSRTab: он ожидает setter для LSRPosition[], у нас — LSRPosition[] | null */
   const setLsrPositionsForTab = useCallback((action: SetStateAction<LSRPosition[]>) => {
@@ -75,6 +93,63 @@ export function EstimateViewPage() {
   const handleStrategy = async (s: CalcStrategy) => {
     await setStrategy(estId, s);
     load();
+  };
+
+  const handleSaveLSR = async () => {
+    if (!est?.lsr) return;
+    const positions = lsrPositions ?? est.lsr.positions;
+    setSavingLSR(true);
+    try {
+      const result: LSRResult = {
+        positions,
+        totalMaterials: positions.reduce((s, p) => s + p.materials, 0),
+        totalLabor: positions.reduce((s, p) => s + p.labor, 0),
+        totalMachines: positions.reduce((s, p) => s + p.machines, 0),
+        totalDirect: positions.reduce((s, p) => s + p.directCost, 0),
+        totalOverhead: positions.reduce((s, p) => s + p.overhead, 0),
+        totalProfit: positions.reduce((s, p) => s + p.profit, 0),
+        grandTotal: positions.reduce((s, p) => s + p.total, 0),
+      };
+      await updateEstimateLSR(estId, result);
+      await load();
+    } finally {
+      setSavingLSR(false);
+    }
+  };
+
+  const lsrDirty = useMemo(() => {
+    if (!est?.lsr || !lsrPositions) return false;
+    return JSON.stringify(lsrPositions) !== JSON.stringify(est.lsr.positions);
+  }, [est?.lsr, lsrPositions]);
+
+  const handleSavePositions = async () => {
+    setSavingPositions(true);
+    try {
+      await updateEstimatePositions(estId, editPositions);
+      setPositionsDirty(false);
+      await load();
+    } finally {
+      setSavingPositions(false);
+    }
+  };
+
+  const handleSaveCompare = async () => {
+    const normalized = normalizeCompareResult({
+      rows: editCompareRows,
+      totalCustomer: 0,
+      totalOur: 0,
+      totalDiff: 0,
+      marginality: 0,
+      possibleProfit: 0,
+    });
+    setSavingCompare(true);
+    try {
+      await updateEstimateCompare(estId, normalized);
+      setCompareDirty(false);
+      await load();
+    } finally {
+      setSavingCompare(false);
+    }
   };
 
   if (loading) return <LoadingSpinner />;
@@ -114,36 +189,37 @@ export function EstimateViewPage() {
         <button className="btn btn--primary btn--sm" onClick={handleCheck} disabled={!!processing}>
           Проверить расчёт
         </button>
-        <button className="btn btn--primary btn--sm" onClick={handleLSR} disabled={!!processing || !est.checkResult}>
+        <button className="btn btn--primary btn--sm" onClick={handleLSR} disabled={!!processing}>
           Сформировать ЛСР
         </button>
         <button className="btn btn--primary btn--sm" onClick={handleCompare} disabled={!!processing || !est.lsr}>
           Сравнить
         </button>
-        <button className="btn btn--secondary btn--sm" onClick={() => downloadEstimatePositions(est)} title="Скачать позиции сметы">
+        <button className="btn btn--secondary btn--sm" onClick={() => downloadEstimatePositions(est)} title="Скачать исходный файл сметы">
           Скачать смету
         </button>
-        {est.lsr && (
-          <button
-            className="btn btn--secondary btn--sm"
-            onClick={() => {
-              const positions = lsrPositions ?? est.lsr!.positions;
-              const result: LSRResult = {
-                positions,
-                totalMaterials: positions.reduce((s, p) => s + p.materials, 0),
-                totalLabor: positions.reduce((s, p) => s + p.labor, 0),
-                totalMachines: positions.reduce((s, p) => s + p.machines, 0),
-                totalDirect: positions.reduce((s, p) => s + p.directCost, 0),
-                totalOverhead: positions.reduce((s, p) => s + p.overhead, 0),
-                totalProfit: positions.reduce((s, p) => s + p.profit, 0),
-                grandTotal: positions.reduce((s, p) => s + p.total, 0),
-              };
-              downloadLSRWithResult(est, result);
-            }}
-          >
-            Скачать ЛСР
-          </button>
-        )}
+        <button
+          className="btn btn--secondary btn--sm"
+          title={est.lsr ? 'Скачать ЛСР' : 'Сначала сформируйте ЛСР'}
+          disabled={!est.lsr}
+          onClick={() => {
+            if (!est.lsr) return;
+            const positions = lsrPositions ?? est.lsr!.positions;
+            const result: LSRResult = {
+              positions,
+              totalMaterials: positions.reduce((s, p) => s + p.materials, 0),
+              totalLabor: positions.reduce((s, p) => s + p.labor, 0),
+              totalMachines: positions.reduce((s, p) => s + p.machines, 0),
+              totalDirect: positions.reduce((s, p) => s + p.directCost, 0),
+              totalOverhead: positions.reduce((s, p) => s + p.overhead, 0),
+              totalProfit: positions.reduce((s, p) => s + p.profit, 0),
+              grandTotal: positions.reduce((s, p) => s + p.total, 0),
+            };
+            downloadLSRWithResult(est, result);
+          }}
+        >
+          Скачать ЛСР
+        </button>
         {est.compare && (
           <button className="btn btn--secondary btn--sm" onClick={() => downloadCompare(est)}>Скачать сравнение</button>
         )}
@@ -179,63 +255,162 @@ export function EstimateViewPage() {
       </div>
 
       {/* Контент вкладок */}
-      {tab === 'positions' && <PositionsTab est={est} totalSum={totalSum} />}
+      {tab === 'positions' && (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+            <button
+              type="button"
+              className="btn btn--primary btn--sm"
+              onClick={() => {
+                const nextId = editPositions.length ? Math.max(...editPositions.map((p) => p.id)) + 1 : 1;
+                setEditPositions((prev) => [...prev, { id: nextId, num: String(prev.length + 1), normCode: '', name: '', unit: '', volume: 0, price: 0, total: 0, overhead: 0, profit: 0 }]);
+                setPositionsDirty(true);
+              }}
+            >
+              + Добавить позицию
+            </button>
+            <button type="button" className="btn btn--primary btn--sm" onClick={handleSavePositions} disabled={!positionsDirty || savingPositions}>
+              {savingPositions ? 'Сохранение...' : 'Сохранить'}
+            </button>
+          </div>
+          <PositionsTab
+            positions={editPositions}
+            setPositions={setEditPositions}
+            setDirty={setPositionsDirty}
+            totalSum={editPositions.reduce((s, p) => s + p.total + p.overhead + p.profit, 0)}
+          />
+        </>
+      )}
       {tab === 'check' && est.checkResult && <CheckTab est={est} />}
       {tab === 'lsr' && est.lsr && (
-        <LSRTab
-          positions={lsrPositions ?? est.lsr.positions}
-          setPositions={setLsrPositionsForTab}
-        />
+        <>
+          <LSRTab
+            positions={lsrPositions ?? est.lsr.positions}
+            setPositions={setLsrPositionsForTab}
+            saveButton={
+              <button type="button" className="btn btn--primary btn--sm" onClick={handleSaveLSR} disabled={!lsrDirty || savingLSR}>
+                {savingLSR ? 'Сохранение...' : 'Сохранить'}
+              </button>
+            }
+          />
+        </>
       )}
-      {tab === 'compare' && est.compare && <CompareTab est={est} />}
+      {tab === 'compare' && est.compare && (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+            <button
+              type="button"
+              className="btn btn--primary btn--sm"
+              onClick={() => {
+                setEditCompareRows((prev) => [...prev, { num: String(prev.length + 1), name: '', customerSum: 0, ourSum: 0, diffRub: 0, diffPct: 0 }]);
+                setCompareDirty(true);
+              }}
+            >
+              + Добавить позицию
+            </button>
+            <button type="button" className="btn btn--primary btn--sm" onClick={handleSaveCompare} disabled={!compareDirty || savingCompare}>
+              {savingCompare ? 'Сохранение...' : 'Сохранить'}
+            </button>
+          </div>
+          <CompareTab
+            rows={editCompareRows}
+            setRows={setEditCompareRows}
+            setDirty={setCompareDirty}
+            totalCustomer={editCompareRows.reduce((s, r) => s + r.customerSum, 0)}
+            totalOur={editCompareRows.reduce((s, r) => s + r.ourSum, 0)}
+          />
+        </>
+      )}
     </div>
   );
 }
 
-/* ==== Вкладка «Позиции» ==== */
-function PositionsTab({ est, totalSum }: { est: Estimate; totalSum: number }) {
+/* ==== Вкладка «Позиции» (редактируемая) ==== */
+const posInputStyle = { width: '100%', minWidth: 60, padding: '4px 6px', fontSize: '0.8125rem' };
+
+function PositionsTab({
+  positions,
+  setPositions,
+  setDirty,
+  totalSum,
+}: {
+  positions: EstimatePosition[];
+  setPositions: React.Dispatch<React.SetStateAction<EstimatePosition[]>>;
+  setDirty: (d: boolean) => void;
+  totalSum: number;
+}) {
+  const update = useCallback(
+    (index: number, field: keyof EstimatePosition, value: string | number) => {
+      setPositions((prev) =>
+        prev.map((p, i) => (i === index ? { ...p, [field]: value } : p))
+      );
+      setDirty(true);
+    },
+    [setPositions, setDirty]
+  );
+
+  const deleteRow = useCallback(
+    (index: number) => {
+      if (!confirm('Удалить позицию?')) return;
+      setPositions((prev) => prev.filter((_, i) => i !== index).map((p, i) => ({ ...p, num: String(i + 1) })));
+      setDirty(true);
+    },
+    [setPositions, setDirty]
+  );
+
   return (
     <div>
       <div className="dash-kpis" style={{ marginBottom: 20 }}>
-        <div className="dash-kpi"><div className="dash-kpi__icon">📋</div><div className="dash-kpi__body"><div className="dash-kpi__value">{est.positions.length}</div><div className="dash-kpi__label">Позиций</div></div></div>
+        <div className="dash-kpi"><div className="dash-kpi__icon">📋</div><div className="dash-kpi__body"><div className="dash-kpi__value">{positions.length}</div><div className="dash-kpi__label">Позиций</div></div></div>
         <div className="dash-kpi"><div className="dash-kpi__icon">💰</div><div className="dash-kpi__body"><div className="dash-kpi__value">{formatMoney(totalSum)}</div><div className="dash-kpi__label">Общая сумма</div></div></div>
       </div>
-      <div className="table-wrap">
+      <div className="table-wrap" style={{ overflowX: 'auto' }}>
         <table className="table">
           <thead>
             <tr>
-              <th>№</th>
-              <th>Код нормы</th>
-              <th>Наименование</th>
-              <th>Ед. изм</th>
-              <th className="text-right">Объём</th>
-              <th className="text-right">Цена</th>
-              <th className="text-right">Сумма</th>
-              <th className="text-right">НР</th>
-              <th className="text-right">СП</th>
+              <th>№пп</th>
+              <th>Шифр, номера нормативов и коды ресурсов</th>
+              <th>Наименование работ и затрат</th>
+              <th>Ед. изм.</th>
+              <th className="text-right">Кол-во единиц</th>
+              <th className="text-right">Цена на единицу измерения, руб.</th>
+              <th>Поправочные коэффициенты</th>
+              <th>Коэффициенты пересчета, номер</th>
+              <th className="text-right">ВСЕГО затрат, руб.</th>
+              <th colSpan={2}>Справ.</th>
+              <th style={{ width: 60 }}></th>
+            </tr>
+            <tr>
+              <th colSpan={9} style={{ borderTop: 'none' }} />
+              <th className="text-right" style={{ fontSize: '0.8rem', fontWeight: 600 }}>ЗТР, всего чел-ч</th>
+              <th className="text-right" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Стоим. ед. с нач., руб.</th>
+              <th />
             </tr>
           </thead>
           <tbody>
-            {est.positions.map((p) => (
+            {positions.map((p, index) => (
               <tr key={p.id}>
-                <td>{p.num}</td>
-                <td><code style={{ fontSize: '0.8rem', background: '#f1f5f9', padding: '2px 6px', borderRadius: 4 }}>{p.normCode}</code></td>
-                <td>{p.name}</td>
-                <td>{p.unit}</td>
-                <td className="text-right">{p.volume.toLocaleString('ru-RU')}</td>
-                <td className="text-right">{formatMoney(p.price)}</td>
-                <td className="text-right text-bold">{formatMoney(p.total)}</td>
-                <td className="text-right">{formatMoney(p.overhead)}</td>
-                <td className="text-right">{formatMoney(p.profit)}</td>
+                <td><input className="input" style={posInputStyle} value={p.num} onChange={(e) => update(index, 'num', e.target.value)} /></td>
+                <td><input className="input" style={posInputStyle} value={p.normCode} onChange={(e) => update(index, 'normCode', e.target.value)} /></td>
+                <td><input className="input" style={{ ...posInputStyle, minWidth: 200 }} value={p.name} onChange={(e) => update(index, 'name', e.target.value)} /></td>
+                <td><input className="input" style={posInputStyle} value={p.unit} onChange={(e) => update(index, 'unit', e.target.value)} /></td>
+                <td className="text-right"><input type="number" className="input text-right" style={posInputStyle} value={p.volume || ''} onChange={(e) => update(index, 'volume', e.target.value === '' ? 0 : Number(e.target.value))} /></td>
+                <td className="text-right"><input type="number" className="input text-right" style={posInputStyle} value={p.price || ''} onChange={(e) => update(index, 'price', e.target.value === '' ? 0 : Number(e.target.value))} /></td>
+                <td><input className="input" style={posInputStyle} value={p.adjustmentCoeff ?? ''} onChange={(e) => update(index, 'adjustmentCoeff', e.target.value)} /></td>
+                <td><input className="input" style={posInputStyle} value={p.recalcCoeffNumber ?? ''} onChange={(e) => update(index, 'recalcCoeffNumber', e.target.value)} /></td>
+                <td className="text-right"><input type="number" className="input text-right" style={posInputStyle} value={p.total || ''} onChange={(e) => update(index, 'total', e.target.value === '' ? 0 : Number(e.target.value))} /></td>
+                <td className="text-right"><input type="number" className="input text-right" style={posInputStyle} value={(p.laborPersonHours ?? 0) || ''} onChange={(e) => update(index, 'laborPersonHours', e.target.value === '' ? 0 : Number(e.target.value))} /></td>
+                <td className="text-right"><input type="number" className="input text-right" style={posInputStyle} value={(p.costPerUnitFromStart ?? 0) || ''} onChange={(e) => update(index, 'costPerUnitFromStart', e.target.value === '' ? 0 : Number(e.target.value))} /></td>
+                <td><button type="button" className="table-action table-action--delete" title="Удалить" onClick={() => deleteRow(index)}>✕</button></td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr style={{ fontWeight: 700 }}>
-              <td colSpan={6}>ИТОГО</td>
-              <td className="text-right">{formatMoney(est.positions.reduce((s, p) => s + p.total, 0))}</td>
-              <td className="text-right">{formatMoney(est.positions.reduce((s, p) => s + p.overhead, 0))}</td>
-              <td className="text-right">{formatMoney(est.positions.reduce((s, p) => s + p.profit, 0))}</td>
+              <td colSpan={8}>ИТОГО</td>
+              <td className="text-right">{formatMoney(positions.reduce((s, p) => s + p.total, 0))}</td>
+              <td className="text-right">{positions.reduce((s, p) => s + (p.laborPersonHours ?? 0), 0).toLocaleString('ru-RU')}</td>
+              <td colSpan={2} />
             </tr>
           </tfoot>
         </table>
@@ -344,9 +519,11 @@ function renumberPositions(positions: LSRPosition[]): LSRPosition[] {
 function LSRTab({
   positions,
   setPositions,
+  saveButton,
 }: {
   positions: LSRPosition[];
   setPositions: React.Dispatch<React.SetStateAction<LSRPosition[]>>;
+  saveButton?: React.ReactNode;
 }) {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addMode, setAddMode] = useState<'from_rates' | 'new_rate'>('from_rates');
@@ -459,8 +636,9 @@ function LSRTab({
         </div>
       </div>
 
-      <div className="tab-header" style={{ marginBottom: 12 }}>
+      <div className="tab-header" style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
         <button type="button" className="btn btn--primary btn--sm" onClick={openAddModal}>+ Добавить позицию</button>
+        {saveButton}
       </div>
 
       <div className="table-wrap">
@@ -490,23 +668,23 @@ function LSRTab({
                 </td>
                 <td>{p.unit}</td>
                 <td className="text-right">
-                  <input type="number" className={inputClass} style={inputStyle} min={0} step="any" value={p.volume} onChange={(e) => updateCell(index, 'volume', Number(e.target.value) || 0)} />
+                  <input type="number" className={inputClass} style={inputStyle} min={0} step="any" value={p.volume === 0 ? '' : p.volume} onChange={(e) => updateCell(index, 'volume', e.target.value === '' ? 0 : Number(e.target.value))} />
                 </td>
                 <td className="text-right">
-                  <input type="number" className={inputClass} style={inputStyle} min={0} step={1} value={p.materials} onChange={(e) => updateCell(index, 'materials', Math.round(Number(e.target.value) || 0))} />
+                  <input type="number" className={inputClass} style={inputStyle} min={0} step={1} value={p.materials === 0 ? '' : p.materials} onChange={(e) => updateCell(index, 'materials', Math.round(e.target.value === '' ? 0 : Number(e.target.value)))} />
                 </td>
                 <td className="text-right">
-                  <input type="number" className={inputClass} style={inputStyle} min={0} step={1} value={p.labor} onChange={(e) => updateCell(index, 'labor', Math.round(Number(e.target.value) || 0))} />
+                  <input type="number" className={inputClass} style={inputStyle} min={0} step={1} value={p.labor === 0 ? '' : p.labor} onChange={(e) => updateCell(index, 'labor', Math.round(e.target.value === '' ? 0 : Number(e.target.value)))} />
                 </td>
                 <td className="text-right">
-                  <input type="number" className={inputClass} style={inputStyle} min={0} step={1} value={p.machines} onChange={(e) => updateCell(index, 'machines', Math.round(Number(e.target.value) || 0))} />
+                  <input type="number" className={inputClass} style={inputStyle} min={0} step={1} value={p.machines === 0 ? '' : p.machines} onChange={(e) => updateCell(index, 'machines', Math.round(e.target.value === '' ? 0 : Number(e.target.value)))} />
                 </td>
                 <td className="text-right">{formatMoney(p.directCost)}</td>
                 <td className="text-right">
-                  <input type="number" className={inputClass} style={inputStyle} min={0} step={1} value={p.overhead} onChange={(e) => updateCell(index, 'overhead', Math.round(Number(e.target.value) || 0))} />
+                  <input type="number" className={inputClass} style={inputStyle} min={0} step={1} value={p.overhead === 0 ? '' : p.overhead} onChange={(e) => updateCell(index, 'overhead', Math.round(e.target.value === '' ? 0 : Number(e.target.value)))} />
                 </td>
                 <td className="text-right">
-                  <input type="number" className={inputClass} style={inputStyle} min={0} step={1} value={p.profit} onChange={(e) => updateCell(index, 'profit', Math.round(Number(e.target.value) || 0))} />
+                  <input type="number" className={inputClass} style={inputStyle} min={0} step={1} value={p.profit === 0 ? '' : p.profit} onChange={(e) => updateCell(index, 'profit', Math.round(e.target.value === '' ? 0 : Number(e.target.value)))} />
                 </td>
                 <td className="text-right text-bold">{formatMoney(p.total)}</td>
                 <td>
@@ -624,7 +802,7 @@ function LSRTab({
                   </div>
                   <div className="form-group">
                     <label className="form-label">Расценка (₽) *</label>
-                    <input type="number" className="input" min={0} step={0.01} value={newRateForm.rate || ''} onChange={(e) => setNewRateForm((f) => ({ ...f, rate: Number(e.target.value) || 0 }))} />
+                    <input type="number" className="input" min={0} step={0.01} value={newRateForm.rate === 0 ? '' : newRateForm.rate} onChange={(e) => setNewRateForm((f) => ({ ...f, rate: e.target.value === '' ? 0 : Number(e.target.value) }))} />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Категория</label>
@@ -644,22 +822,65 @@ function LSRTab({
   );
 }
 
-/* ==== Вкладка «Сравнение» ==== */
-function CompareTab({ est }: { est: Estimate }) {
-  const c = est.compare!;
+/* ==== Вкладка «Сравнение» (редактируемая) ==== */
+const compareInputStyle = { width: 100, padding: '4px 6px', fontSize: '0.8125rem' };
+
+function CompareTab({
+  rows,
+  setRows,
+  setDirty,
+  totalCustomer,
+  totalOur,
+}: {
+  rows: CompareRow[];
+  setRows: React.Dispatch<React.SetStateAction<CompareRow[]>>;
+  setDirty: (d: boolean) => void;
+  totalCustomer: number;
+  totalOur: number;
+}) {
+  const totalDiff = totalCustomer - totalOur;
+  const possibleProfit = totalDiff;
+  const totalDiffPct = totalCustomer > 0 ? Math.round((totalDiff / totalCustomer) * 100) : 0;
+  const marginality = totalDiffPct;
+
+  const updateRow = useCallback(
+    (index: number, field: 'customerSum' | 'ourSum' | 'name' | 'num', value: number | string) => {
+      setRows((prev) =>
+        prev.map((r, i) => {
+          if (i !== index) return r;
+          const row = { ...r, [field]: value };
+          const cust = typeof row.customerSum === 'number' ? row.customerSum : 0;
+          const our = typeof row.ourSum === 'number' ? row.ourSum : 0;
+          return { ...row, diffRub: cust - our, diffPct: cust > 0 ? Math.round(((cust - our) / cust) * 100) : 0 };
+        })
+      );
+      setDirty(true);
+    },
+    [setRows, setDirty]
+  );
+
+  const deleteRow = useCallback(
+    (index: number) => {
+      if (!confirm('Удалить позицию из сравнения?')) return;
+      setRows((prev) => prev.filter((_, i) => i !== index).map((r, i) => ({ ...r, num: String(i + 1) })));
+      setDirty(true);
+    },
+    [setRows, setDirty]
+  );
+
   return (
     <div>
       <div className="dash-kpis" style={{ marginBottom: 20 }}>
-        <div className="dash-kpi"><div className="dash-kpi__icon">📄</div><div className="dash-kpi__body"><div className="dash-kpi__value">{formatMoney(c.totalCustomer)}</div><div className="dash-kpi__label">Смета заказчика</div></div></div>
-        <div className="dash-kpi"><div className="dash-kpi__icon">📐</div><div className="dash-kpi__body"><div className="dash-kpi__value">{formatMoney(c.totalOur)}</div><div className="dash-kpi__label">Наш ЛСР</div></div></div>
-        <div className="dash-kpi"><div className="dash-kpi__icon">📊</div><div className="dash-kpi__body"><div className="dash-kpi__value">{formatMoney(c.totalDiff)}</div><div className="dash-kpi__label">Общая разница</div></div></div>
-        <div className="dash-kpi"><div className="dash-kpi__icon">💹</div><div className="dash-kpi__body"><div className="dash-kpi__value">{c.marginality}%</div><div className="dash-kpi__label">Маржинальность</div></div></div>
+        <div className="dash-kpi"><div className="dash-kpi__icon">📄</div><div className="dash-kpi__body"><div className="dash-kpi__value">{formatMoney(totalCustomer)}</div><div className="dash-kpi__label">Смета заказчика</div></div></div>
+        <div className="dash-kpi"><div className="dash-kpi__icon">📐</div><div className="dash-kpi__body"><div className="dash-kpi__value">{formatMoney(totalOur)}</div><div className="dash-kpi__label">Наш ЛСР</div></div></div>
+        <div className="dash-kpi"><div className="dash-kpi__icon">📊</div><div className="dash-kpi__body"><div className="dash-kpi__value">{formatMoney(totalDiff)}</div><div className="dash-kpi__label">Общая разница</div></div></div>
+        <div className="dash-kpi"><div className="dash-kpi__icon">💹</div><div className="dash-kpi__body"><div className="dash-kpi__value">{marginality}%</div><div className="dash-kpi__label">Маржинальность</div></div></div>
       </div>
       <div className="dash-cols" style={{ marginBottom: 20 }}>
         <div className="dash-card">
           <h3 className="dash-card__title">Итоги сравнения</h3>
           <div style={{ fontSize: '0.875rem' }}>
-            <div className="summary-row"><span className="summary-row__label">Возможная прибыль</span><span className="summary-row__value text-success text-bold">{formatMoney(c.possibleProfit)}</span></div>
+            <div className="summary-row"><span className="summary-row__label">Возможная прибыль</span><span className={`summary-row__value text-bold ${possibleProfit >= 0 ? 'text-success' : 'text-danger'}`}>{formatMoney(possibleProfit)}</span></div>
           </div>
         </div>
       </div>
@@ -673,27 +894,34 @@ function CompareTab({ est }: { est: Estimate }) {
               <th className="text-right">Наш ЛСР</th>
               <th className="text-right">Разница ₽</th>
               <th className="text-right">Разница %</th>
+              <th style={{ width: 50 }}></th>
             </tr>
           </thead>
           <tbody>
-            {c.rows.map((row) => (
-              <tr key={row.num}>
-                <td>{row.num}</td>
-                <td>{row.name}</td>
-                <td className="text-right">{formatMoney(row.customerSum)}</td>
-                <td className="text-right">{formatMoney(row.ourSum)}</td>
-                <td className={`text-right text-bold ${row.diffRub > 0 ? 'text-success' : row.diffRub < 0 ? 'text-danger' : ''}`}>{row.diffRub >= 0 ? '+' : ''}{formatMoney(row.diffRub)}</td>
-                <td className={`text-right ${row.diffPct > 0 ? 'text-success' : row.diffPct < 0 ? 'text-danger' : ''}`}>{row.diffPct >= 0 ? '+' : ''}{row.diffPct}%</td>
-              </tr>
-            ))}
+            {rows.map((row, index) => {
+              const diffRub = row.customerSum - row.ourSum;
+              const diffPct = row.customerSum > 0 ? Math.round((diffRub / row.customerSum) * 100) : 0;
+              return (
+                <tr key={`${row.num}-${index}`}>
+                  <td><input className="input" style={compareInputStyle} value={row.num} onChange={(e) => updateRow(index, 'num', e.target.value)} /></td>
+                  <td><input className="input" style={{ ...compareInputStyle, minWidth: 180 }} value={row.name} onChange={(e) => updateRow(index, 'name', e.target.value)} /></td>
+                  <td className="text-right"><input type="number" className="input text-right" style={compareInputStyle} value={row.customerSum || ''} onChange={(e) => updateRow(index, 'customerSum', e.target.value === '' ? 0 : Number(e.target.value))} /></td>
+                  <td className="text-right"><input type="number" className="input text-right" style={compareInputStyle} value={row.ourSum || ''} onChange={(e) => updateRow(index, 'ourSum', e.target.value === '' ? 0 : Number(e.target.value))} /></td>
+                  <td className={`text-right text-bold ${diffRub > 0 ? 'text-success' : diffRub < 0 ? 'text-danger' : ''}`}>{diffRub >= 0 ? '+' : ''}{formatMoney(diffRub)}</td>
+                  <td className={`text-right ${diffPct > 0 ? 'text-success' : diffPct < 0 ? 'text-danger' : ''}`}>{diffPct >= 0 ? '+' : ''}{diffPct}%</td>
+                  <td><button type="button" className="table-action table-action--delete" title="Удалить" onClick={() => deleteRow(index)}>✕</button></td>
+                </tr>
+              );
+            })}
           </tbody>
           <tfoot>
             <tr style={{ fontWeight: 700 }}>
               <td colSpan={2}>ИТОГО</td>
-              <td className="text-right">{formatMoney(c.totalCustomer)}</td>
-              <td className="text-right">{formatMoney(c.totalOur)}</td>
-              <td className={`text-right ${c.totalDiff > 0 ? 'text-success' : 'text-danger'}`}>{c.totalDiff >= 0 ? '+' : ''}{formatMoney(c.totalDiff)}</td>
-              <td className={`text-right ${c.marginality > 0 ? 'text-success' : 'text-danger'}`}>{c.marginality >= 0 ? '+' : ''}{c.marginality}%</td>
+              <td className="text-right">{formatMoney(totalCustomer)}</td>
+              <td className="text-right">{formatMoney(totalOur)}</td>
+              <td className={`text-right ${totalDiff > 0 ? 'text-success' : 'text-danger'}`}>{totalDiff >= 0 ? '+' : ''}{formatMoney(totalDiff)}</td>
+              <td className={`text-right ${totalDiffPct > 0 ? 'text-success' : totalDiffPct < 0 ? 'text-danger' : ''}`}>{totalDiffPct >= 0 ? '+' : ''}{totalDiffPct}%</td>
+              <td />
             </tr>
           </tfoot>
         </table>

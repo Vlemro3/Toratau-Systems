@@ -1,6 +1,7 @@
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.database import get_db
 from app import models
 from app.auth import verify_password, get_password_hash, create_access_token
@@ -18,11 +19,14 @@ from app.schemas import (
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+WRONG_CREDENTIALS = "Некорректный логин или пароль"
+
+
 @router.post("/login", response_model=LoginResponse)
 def login(data: LoginRequest, db: Session = Depends(get_db)):
-    # Суперадмин: без портала, по username + role superAdmin
+    # Суперадмин: без портала, по username + role superAdmin (логин без учёта регистра)
     superadmin_user = db.query(models.User).filter(
-        models.User.username == data.username,
+        func.lower(models.User.username) == data.username.lower(),
         models.User.role == "superAdmin",
         models.User.portal_id.is_(None),
     ).first()
@@ -35,19 +39,30 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
             token_type="bearer",
             user=user_to_response(superadmin_user, db),
         )
-    # Порталный пользователь
+    # Порталный пользователь: сначала ищем в указанном/дефолтном портале, затем по всем порталам (для входа после регистрации)
     portal_slug = data.portal_slug or settings.default_portal_slug
     portal = db.query(models.Portal).filter(models.Portal.slug == portal_slug).first()
-    if not portal:
-        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
-    if portal.status == "blocked":
-        raise HTTPException(status_code=403, detail="Портал заблокирован")
-    user = db.query(models.User).filter(
-        models.User.portal_id == portal.id,
-        models.User.username == data.username,
-    ).first()
+    user = None
+    if portal and portal.status != "blocked":
+        user = db.query(models.User).filter(
+            models.User.portal_id == portal.id,
+            func.lower(models.User.username) == data.username.lower(),
+        ).first()
+    if not user:
+        # Пользователь мог зарегистрироваться в своём портале — ищем по всем порталам
+        candidates = db.query(models.User).filter(
+            models.User.portal_id.isnot(None),
+            func.lower(models.User.username) == data.username.lower(),
+        ).all()
+        for c in candidates:
+            if verify_password(data.password, c.hashed_password):
+                user = c
+                break
     if not user or not verify_password(data.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+        raise HTTPException(status_code=401, detail=WRONG_CREDENTIALS)
+    portal = db.query(models.Portal).filter(models.Portal.id == user.portal_id).first()
+    if portal and portal.status == "blocked":
+        raise HTTPException(status_code=403, detail="Портал заблокирован")
     if not user.is_active:
         raise HTTPException(status_code=401, detail="Пользователь деактивирован")
     token = create_access_token({"sub": str(user.id), "role": user.role})
@@ -60,7 +75,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
 
 @router.post("/register", response_model=LoginResponse)
 def register(data: RegisterRequest, db: Session = Depends(get_db)):
-    if db.query(models.User).filter(models.User.username == data.username).first():
+    if db.query(models.User).filter(func.lower(models.User.username) == data.username.lower()).first():
         raise HTTPException(status_code=400, detail="Пользователь с таким логином уже существует")
     slug = "portal-" + data.username.lower().replace(" ", "-")[:32]
     if db.query(models.Portal).filter(models.Portal.slug == slug).first():

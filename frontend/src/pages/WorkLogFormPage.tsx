@@ -73,7 +73,10 @@ export function WorkLogFormPage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     const isNumeric = type === 'number' || name.endsWith('_id') || name === 'volume' || name === 'accrued_amount';
-    setForm((prev) => ({ ...prev, [name]: isNumeric ? Number(value) : value }));
+    setForm((prev) => ({
+      ...prev,
+      [name]: isNumeric ? (value === '' ? 0 : Number(value)) : value,
+    }));
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -131,13 +134,13 @@ export function WorkLogFormPage() {
           </div>
           <div className="form-group">
             <label>Объём ({selectedWorkType?.unit || 'ед.'}) *</label>
-            <input type="number" name="volume" value={form.volume || ''} onChange={handleChange} min="0.01" step="0.01" required placeholder="0" />
+            <input type="number" name="volume" value={form.volume === 0 ? '' : form.volume} onChange={handleChange} min="0.01" step="0.01" required placeholder="0" />
           </div>
         </div>
 
         <div className="form-group">
           <label>Сумма (руб) *</label>
-          <input type="number" name="accrued_amount" value={form.accrued_amount || ''} onChange={handleChange} min="0" step="0.01" required placeholder="0" />
+          <input type="number" name="accrued_amount" value={form.accrued_amount === 0 ? '' : form.accrued_amount} onChange={handleChange} min="0" step="0.01" required placeholder="0" />
         </div>
 
         {!isEdit && (

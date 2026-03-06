@@ -2002,7 +2002,7 @@ img {
   line-height: 1;
 }
 
-/* ---- Модальное окно ---- */
+/* ---- Модальное окно подтверждения (Удалить объект и др.) ---- */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -2015,13 +2015,13 @@ img {
   animation: fadeIn 0.15s ease;
 }
 
-.modal {
-  background: var(--color-bg-card);
+.modal-overlay .modal {
+  background: #fff;
   border-radius: var(--radius-lg);
   padding: 24px;
   max-width: 400px;
   width: 100%;
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
 }
 
 .modal__title {

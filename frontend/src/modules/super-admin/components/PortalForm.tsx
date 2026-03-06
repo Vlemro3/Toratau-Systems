@@ -164,8 +164,8 @@ export function PortalForm({ portal, onSubmit, onCancel }: Props) {
           <label>Макс. пользователей</label>
           <input
             type="number"
-            value={maxUsers}
-            onChange={(e) => setMaxUsers(Number(e.target.value))}
+            value={maxUsers === 0 ? '' : maxUsers}
+            onChange={(e) => setMaxUsers(e.target.value === '' ? 0 : Number(e.target.value))}
             min="1"
             disabled={saving}
           />
@@ -175,8 +175,8 @@ export function PortalForm({ portal, onSubmit, onCancel }: Props) {
           <label>Макс. хранилище (МБ)</label>
           <input
             type="number"
-            value={maxStorageMb}
-            onChange={(e) => setMaxStorageMb(Number(e.target.value))}
+            value={maxStorageMb === 0 ? '' : maxStorageMb}
+            onChange={(e) => setMaxStorageMb(e.target.value === '' ? 0 : Number(e.target.value))}
             min="1"
             disabled={saving}
           />
@@ -188,8 +188,8 @@ export function PortalForm({ portal, onSubmit, onCancel }: Props) {
           <label>Количество пользователей (для mock)</label>
           <input
             type="number"
-            value={usersCount}
-            onChange={(e) => setUsersCount(Number(e.target.value))}
+            value={usersCount === 0 ? '' : usersCount}
+            onChange={(e) => setUsersCount(e.target.value === '' ? 0 : Number(e.target.value))}
             min="0"
             disabled={saving}
           />

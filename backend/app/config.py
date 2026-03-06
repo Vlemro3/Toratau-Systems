@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     default_portal_slug: str = "demo"
     superadmin_login: str = "superadmin"
     superadmin_password: str = "superadmin123"
+    openai_api_key: str = ""
+    # Модель OpenAI для модуля смет (gpt-4.1, gpt-4.1-mini, gpt-4o и т.д.)
+    openai_estimate_model: str = "gpt-4.1"
 
     class Config:
         env_file = ".env"

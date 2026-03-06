@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getEstimateSettings, saveEstimateSettings, STRATEGY_LABELS, REGIONS } from '../../api/estimates';
+import { getEstimateSettings, saveEstimateSettings, STRATEGY_LABELS, REGIONS_SORTED } from '../../api/estimates';
 import type { EstimateSettings, CalcStrategy } from '../../api/estimates';
 import { LoadingSpinner } from '../../components/LoadingSpinner';
 
@@ -54,8 +54,8 @@ export function EstimateSettingsPage() {
               className="input"
               type="number"
               step="0.1"
-              value={settings.overheadPct}
-              onChange={(e) => setSettings({ ...settings, overheadPct: Number(e.target.value) })}
+              value={settings.overheadPct === 0 ? '' : settings.overheadPct}
+              onChange={(e) => setSettings({ ...settings, overheadPct: e.target.value === '' ? 0 : Number(e.target.value) })}
             />
           </div>
           <div className="form-group">
@@ -64,8 +64,8 @@ export function EstimateSettingsPage() {
               className="input"
               type="number"
               step="0.1"
-              value={settings.profitPct}
-              onChange={(e) => setSettings({ ...settings, profitPct: Number(e.target.value) })}
+              value={settings.profitPct === 0 ? '' : settings.profitPct}
+              onChange={(e) => setSettings({ ...settings, profitPct: e.target.value === '' ? 0 : Number(e.target.value) })}
             />
           </div>
           <div className="form-group">
@@ -86,8 +86,8 @@ export function EstimateSettingsPage() {
               className="input"
               type="number"
               step="0.5"
-              value={settings.customMarginPct}
-              onChange={(e) => setSettings({ ...settings, customMarginPct: Number(e.target.value) })}
+              value={settings.customMarginPct === 0 ? '' : settings.customMarginPct}
+              onChange={(e) => setSettings({ ...settings, customMarginPct: e.target.value === '' ? 0 : Number(e.target.value) })}
             />
           </div>
         </div>
@@ -97,7 +97,7 @@ export function EstimateSettingsPage() {
           <p className="text-muted" style={{ fontSize: '0.875rem', marginBottom: 12 }}>
             Множитель к базовой цене. 1.0 — без надбавки.
           </p>
-          {REGIONS.map((region) => (
+          {REGIONS_SORTED.map((region) => (
             <div key={region} className="form-group" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <label className="form-label" style={{ flex: 1, marginBottom: 0 }}>{region}</label>
               <input
@@ -105,8 +105,8 @@ export function EstimateSettingsPage() {
                 type="number"
                 step="0.01"
                 style={{ width: 100 }}
-                value={settings.regionCoefficients[region] ?? 1.0}
-                onChange={(e) => updateCoeff(region, Number(e.target.value))}
+                value={(settings.regionCoefficients[region] ?? 1.0) === 0 ? '' : (settings.regionCoefficients[region] ?? 1.0)}
+                onChange={(e) => updateCoeff(region, e.target.value === '' ? 0 : Number(e.target.value))}
               />
             </div>
           ))}
