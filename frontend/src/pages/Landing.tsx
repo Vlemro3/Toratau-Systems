@@ -156,7 +156,7 @@ const Landing: React.FC = () => {
                       fontSize: { xs: '1.65rem', sm: '2rem', md: 'inherit' },
                     }}
                   >
-                    Простая программа для управления строительной компании
+                    Программа для управления строительной компанией
                   </Typography>
 
                   <Typography
