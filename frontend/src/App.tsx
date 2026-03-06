@@ -9,6 +9,7 @@ import { AuthProvider } from './context/AuthContext';
 import { SubscriptionProvider } from './billing/SubscriptionContext';
 import { SubscriptionGuard } from './billing/SubscriptionGuard';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { useAuth } from './hooks/useAuth';
 import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
@@ -44,6 +45,14 @@ import { SuperAdminDashboard } from './modules/super-admin/pages/SuperAdminDashb
 import { PortalsListPage } from './modules/super-admin/pages/PortalsListPage';
 import { PortalDetailsPage } from './modules/super-admin/pages/PortalDetailsPage';
 
+/** Если пользователь авторизован — редирект на дашборд, иначе — лендинг */
+function LandingOrDashboard() {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (user) return <Navigate to="/dashboard" replace />;
+  return <Landing />;
+}
+
 export default function App() {
   return (
     <ThemeProvider theme={theme}>
@@ -52,8 +61,8 @@ export default function App() {
         <AuthProvider>
           <SubscriptionProvider>
           <Routes>
-            {/* Публичная landing страница */}
-            <Route path="/" element={<Landing />} />
+            {/* Публичная landing — если авторизован, редирект на дашборд */}
+            <Route path="/" element={<LandingOrDashboard />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
 

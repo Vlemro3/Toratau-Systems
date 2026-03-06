@@ -35,8 +35,9 @@ def superadmin_login(data: SuperadminLoginRequest, db: Session = Depends(get_db)
     )
 
 
-def _portal_to_response(p: models.Portal, db: Session) -> PortalResponse:
-    users_count = db.query(func.count(models.User.id)).filter(models.User.portal_id == p.id).scalar() or 0
+def _portal_to_response(p: models.Portal, db: Session, users_count: int | None = None) -> PortalResponse:
+    if users_count is None:
+        users_count = db.query(func.count(models.User.id)).filter(models.User.portal_id == p.id).scalar() or 0
     return PortalResponse(
         id=p.slug,
         name=p.name,
@@ -55,7 +56,13 @@ def get_all_portals(
     db: Session = Depends(get_db),
 ):
     portals = db.query(models.Portal).all()
-    return [_portal_to_response(p, db) for p in portals]
+    # Один запрос вместо N+1: подсчёт пользователей по всем порталам
+    counts = dict(
+        db.query(models.User.portal_id, func.count(models.User.id))
+        .group_by(models.User.portal_id)
+        .all()
+    )
+    return [_portal_to_response(p, db, users_count=counts.get(p.id, 0)) for p in portals]
 
 
 @router.get("/portals/{portal_id}", response_model=PortalResponse)

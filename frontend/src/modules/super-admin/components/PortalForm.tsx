@@ -33,7 +33,6 @@ export function PortalForm({ portal, onSubmit, onCancel }: Props) {
   const [status, setStatus] = useState<PortalStatus>(portal?.status || 'active');
   const [maxUsers, setMaxUsers] = useState(portal?.limits.maxUsers || 10);
   const [maxStorageMb, setMaxStorageMb] = useState(portal?.limits.maxStorageMb || 1000);
-  const [usersCount, setUsersCount] = useState(portal?.usersCount || 0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -56,7 +55,6 @@ export function PortalForm({ portal, onSubmit, onCancel }: Props) {
               maxUsers,
               maxStorageMb,
             },
-            usersCount,
           }
         : {
             name,
@@ -185,13 +183,12 @@ export function PortalForm({ portal, onSubmit, onCancel }: Props) {
 
       {portal && (
         <div className="form-group">
-          <label>Количество пользователей (для mock)</label>
+          <label>Пользователей в портале</label>
           <input
             type="number"
-            value={usersCount === 0 ? '' : usersCount}
-            onChange={(e) => setUsersCount(e.target.value === '' ? 0 : Number(e.target.value))}
-            min="0"
-            disabled={saving}
+            value={portal.usersCount}
+            disabled
+            title="Считается автоматически из базы данных"
           />
         </div>
       )}
