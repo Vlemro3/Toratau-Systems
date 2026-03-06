@@ -19,7 +19,8 @@ interface Props {
 const PROJECT_ITEMS_ADMIN = [
   { path: '', icon: '📊', label: 'Сводка' },
   { path: '/works', icon: '🔨', label: 'Работы' },
-  { path: '/expenses-payouts', icon: '💸', label: 'Расходы и выплаты' },
+  { path: '/expenses', icon: '🧾', label: 'Расходы' },
+  { path: '/payouts', icon: '💸', label: 'Выплаты' },
   { path: '/payments', icon: '💰', label: 'Платежи' },
 ];
 

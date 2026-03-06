@@ -1,5 +1,5 @@
 """
-Сервис анализа смет с помощью OpenAI.
+Сервис анализа смет с помощью Anthropic Claude.
 Проверка сметы, формирование ЛСР, сравнение.
 Чтение/распознавание файлов выполняется в estimate_file_parser.py (без нейросети).
 """
@@ -10,11 +10,11 @@ from typing import Any
 from app.config import settings
 
 
-def _get_openai_client():
-    from openai import OpenAI
-    if not settings.openai_api_key:
-        raise ValueError("OPENAI_API_KEY не задан. Укажите в .env для работы с нейросетью.")
-    return OpenAI(api_key=settings.openai_api_key)
+def _get_anthropic_client():
+    from anthropic import Anthropic
+    if not settings.anthropic_api_key:
+        raise ValueError("ANTHROPIC_API_KEY не задан. Укажите в .env для работы с нейросетью.")
+    return Anthropic(api_key=settings.anthropic_api_key)
 
 
 CHECK_SYSTEM = """You are an expert in estimate verification. Based on the given estimate positions, determine:
@@ -35,8 +35,8 @@ rows — array of { num, name, customerSum, ourSum, diffRub, diffPct }; plus tot
 Return ONLY valid JSON with keys: rows, totalCustomer, totalOur, totalDiff, marginality, possibleProfit."""
 
 
-def _parse_json_from_gpt(raw: str) -> dict[str, Any]:
-    """Parse JSON from GPT response; fix common invalid JSON (trailing commas, single-quoted keys, etc.)."""
+def _parse_json_from_response(raw: str) -> dict[str, Any]:
+    """Parse JSON from Claude response; fix common invalid JSON (trailing commas, single-quoted keys, etc.)."""
     match = re.search(r"\{[\s\S]*\}", raw)
     s = match.group(0) if match else raw
     try:
@@ -78,20 +78,24 @@ def _parse_json_from_gpt(raw: str) -> dict[str, Any]:
     )
 
 
-def _call_gpt(system: str, user_content: str, max_tokens: int = 4000) -> dict[str, Any]:
-    client = _get_openai_client()
+def _call_claude(system: str, user_content: str, max_tokens: int = 4096) -> dict[str, Any]:
+    client = _get_anthropic_client()
     content = user_content[:150000] if len(user_content) > 150000 else user_content
-    resp = client.chat.completions.create(
-        model=settings.openai_estimate_model,
+    resp = client.messages.create(
+        model=settings.anthropic_estimate_model,
+        max_tokens=max_tokens,
+        system=system,
         messages=[
-            {"role": "system", "content": system},
             {"role": "user", "content": content},
         ],
-        max_tokens=max_tokens,
         temperature=0.1,
     )
-    text = (resp.choices[0].message.content or "").strip()
-    return _parse_json_from_gpt(text)
+    text = ""
+    for block in resp.content:
+        if block.type == "text":
+            text += block.text
+    text = text.strip()
+    return _parse_json_from_response(text)
 
 
 def _safe_float(val: Any, default: float = 0) -> float:
@@ -106,7 +110,7 @@ def _safe_float(val: Any, default: float = 0) -> float:
 def check_estimate(positions: list[dict], region: str = "") -> dict[str, Any]:
     """Проверка сметы: возвращает CheckResult."""
     user = f"Регион: {region}. Позиции:\n{json.dumps(positions, ensure_ascii=False, indent=0)}"
-    out = _call_gpt(CHECK_SYSTEM, user)
+    out = _call_claude(CHECK_SYSTEM, user)
     return {
         "totalSum": float(out.get("totalSum") or 0),
         "marketEstimate": float(out.get("marketEstimate") or 0),
@@ -121,7 +125,7 @@ def check_estimate(positions: list[dict], region: str = "") -> dict[str, Any]:
 def generate_lsr(positions: list[dict], strategy: str = "standard") -> dict[str, Any]:
     """Формирование ЛСР по позициям сметы."""
     user = f"Стратегия: {strategy}. Позиции сметы:\n{json.dumps(positions, ensure_ascii=False, indent=0)}"
-    out = _call_gpt(LSR_SYSTEM, user)
+    out = _call_claude(LSR_SYSTEM, user)
     positions_lsr = out.get("positions") or []
     for i, p in enumerate(positions_lsr):
         p["id"] = i + 1
@@ -140,4 +144,4 @@ def generate_lsr(positions: list[dict], strategy: str = "standard") -> dict[str,
 def run_compare(positions: list[dict], lsr: dict[str, Any]) -> dict[str, Any]:
     """Сравнение сметы заказчика и нашего ЛСР."""
     user = f"Позиции сметы заказчика:\n{json.dumps(positions, ensure_ascii=False)}\n\nНаш ЛСР:\n{json.dumps(lsr, ensure_ascii=False)}"
-    return _call_gpt(COMPARE_SYSTEM, user)
+    return _call_claude(COMPARE_SYSTEM, user)

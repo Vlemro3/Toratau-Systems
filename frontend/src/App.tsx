@@ -39,6 +39,7 @@ import { EstimatesListPage } from './pages/estimates/EstimatesListPage';
 import { EstimateCreatePage } from './pages/estimates/EstimateCreatePage';
 import { EstimateViewPage } from './pages/estimates/EstimateViewPage';
 import { EstimateSettingsPage } from './pages/estimates/EstimateSettingsPage';
+import { EstimateManualCreatePage } from './pages/estimates/EstimateManualCreatePage';
 import { SuperAdminDashboard } from './modules/super-admin/pages/SuperAdminDashboard';
 import { PortalsListPage } from './modules/super-admin/pages/PortalsListPage';
 import { PortalDetailsPage } from './modules/super-admin/pages/PortalDetailsPage';
@@ -172,6 +173,9 @@ export default function App() {
             } />
             <Route path="/estimates/new" element={
               <ProtectedRoute requiredRole="admin"><EstimateCreatePage /></ProtectedRoute>
+            } />
+            <Route path="/estimates/create" element={
+              <ProtectedRoute requiredRole="admin"><EstimateManualCreatePage /></ProtectedRoute>
             } />
             <Route path="/estimates/settings" element={
               <ProtectedRoute requiredRole="admin"><EstimateSettingsPage /></ProtectedRoute>

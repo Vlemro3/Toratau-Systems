@@ -159,9 +159,6 @@ export function ProjectPage() {
           <p className="text-muted">
             {project.name} · {project.client}{' '}
             <StatusBadge label={PROJECT_STATUS_LABELS[project.status]} color={PROJECT_STATUS_COLORS[project.status]} />
-            {section === 'summary' && (
-              <span style={{ marginLeft: 12, fontWeight: 600 }}>Фел и Айдос красавчики!</span>
-            )}
           </p>
         </div>
         {isAdmin && section === 'summary' && (

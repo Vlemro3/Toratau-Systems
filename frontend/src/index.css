@@ -1420,22 +1420,23 @@ img {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  z-index: 600;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
+  animation: fadeIn 0.15s ease;
 }
 
 .modal-overlay--center {
   align-items: center;
   justify-content: center;
+}
+
 .modal--opaque {
   background: #fff;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
-}
-
 }
 
 .modal {
@@ -2003,18 +2004,6 @@ img {
 }
 
 /* ---- Модальное окно подтверждения (Удалить объект и др.) ---- */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 16px;
-  animation: fadeIn 0.15s ease;
-}
-
 .modal-overlay .modal {
   background: #fff;
   border-radius: var(--radius-lg);
@@ -3437,8 +3426,8 @@ img {
   color: var(--color-text);
 }
 
-/* ---- Modal ---- */
-.modal {
+/* ---- Modal (как overlay, для standalone использования) ---- */
+.modal--standalone {
   position: fixed;
   inset: 0;
   z-index: 1000;
@@ -3448,54 +3437,6 @@ img {
   background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
   padding: 20px;
-}
-
-.modal__content {
-  background: var(--color-bg-card);
-  border-radius: var(--radius-lg);
-  max-width: 600px;
-  width: 100%;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: var(--shadow-lg);
-}
-
-.modal__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.modal__header h3 {
-  margin: 0;
-  font-size: 1.2rem;
-}
-
-.modal__close {
-  background: none;
-  border: none;
-  font-size: 2rem;
-  line-height: 1;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  transition: background 0.2s;
-}
-
-.modal__close:hover {
-  background: var(--color-bg);
-}
-
-.modal__body {
-  padding: 24px;
 }
 
 /* Responsive */

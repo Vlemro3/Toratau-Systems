@@ -96,61 +96,111 @@ def _parse_xls(content: bytes) -> list[dict[str, Any]]:
 
 # Варианты заголовков для определения колонок (нижний регистр)
 HEADER_ALIASES = {
-    "num": ("№", "номер", "num", "number", "n", "поз", "позиция"),
-    "normCode": ("код", "норма", "норм", "code", "norm", "фер", "тер", "гесн"),
-    "name": ("наименование", "название", "описание", "name", "description", "работы"),
-    "unit": ("ед", "ед.изм", "единица", "unit", "measure", "измерен"),
-    "volume": ("кол", "количество", "объем", "volume", "quantity", "qty", "объём"),
-    "price": ("цена", "цена ед", "price", "unitprice", "руб"),
-    "total": ("сумма", "всего", "total", "sum", "amount", "итого"),
+    "num": ("№ п/п", "№п/п", "№", "номер", "num", "number", "n п/п", "поз", "позиция"),
+    "normCode": ("обоснование", "шифр", "код", "норма", "норм", "code", "norm", "фер", "тер", "гесн"),
+    "name": ("наименование работ", "наименование", "название", "описание", "name", "description", "работы и затрат"),
+    "unit": ("единица измерения", "ед.изм", "ед. изм", "ед", "единица", "unit", "measure", "измерен"),
+    "volume": ("на единицу измерения", "кол-во", "кол", "количество", "объем", "volume", "quantity", "qty", "объём"),
+    "price": ("цена", "цена ед", "price", "unitprice", "руб", "на единицу измерения в базовом уровне цен"),
+    "total": ("всего затрат", "всего в текущих", "всего", "сумма", "total", "sum", "amount", "итого", "сметная стоимость"),
     "overhead": ("нр", "накладные", "overhead"),
     "profit": ("сп", "прибыль", "profit"),
 }
+
+# Ключевые слова, которые однозначно определяют строку как строку заголовков таблицы
+_HEADER_KEYWORDS = ("наименование", "название", "обоснование", "ед.изм", "единица", "name", "code", "№ п/п", "№п/п")
+# Строки-разделители, которые не являются позициями (секции, разделы и т.п.)
+_SKIP_PREFIXES = ("итого", "всего", "total", "сумма", "раздел", "глава", "в том числе", "накладные расходы", "сметная прибыль")
+
+
+def _find_header_row(rows: list[tuple[Any, ...] | list[Any]]) -> tuple[int, dict[str, int]]:
+    """Ищет строку заголовков по всему файлу, возвращает (индекс_строки, col_map)."""
+    best_row = -1
+    best_map: dict[str, int] = {}
+
+    for row_idx, row in enumerate(rows):
+        cells = [str(c).strip().lower() if c is not None else "" for c in row]
+        joined = " ".join(cells)
+
+        # Проверяем, содержит ли строка ключевые слова заголовков
+        if not any(kw in joined for kw in _HEADER_KEYWORDS):
+            continue
+
+        col_map: dict[str, int] = {}
+        for key, aliases in HEADER_ALIASES.items():
+            for idx, cell in enumerate(cells):
+                if not cell:
+                    continue
+                cell_clean = re.sub(r"[^\wа-яё/]", "", cell, flags=re.I)
+                for al in aliases:
+                    al_lower = al.lower()
+                    al_clean = re.sub(r"[^\wа-яё/]", "", al_lower, flags=re.I)
+                    if al_lower in cell or (len(cell_clean) >= 2 and al_clean and al_clean in cell_clean):
+                        col_map[key] = idx
+                        break
+                if key in col_map:
+                    break
+
+        # Выбираем строку с максимальным числом совпавших колонок
+        if len(col_map) > len(best_map):
+            best_map = col_map
+            best_row = row_idx
+
+    return best_row, best_map
 
 
 def _excel_rows_to_positions(rows: list[tuple[Any, ...] | list[Any]]) -> list[dict[str, Any]]:
     if not rows:
         return []
-    # Первая строка — возможно заголовок
-    first = [str(c).strip().lower() if c is not None else "" for c in rows[0]]
-    col_map: dict[str, int] = {}
-    for key, aliases in HEADER_ALIASES.items():
-        for idx, cell in enumerate(first):
-            if not cell:
-                continue
-            cell_clean = re.sub(r"[^\wа-яё]", "", cell, flags=re.I)
-            for al in aliases:
-                if al in cell or (len(cell_clean) >= 2 and al.replace(".", "") in cell_clean):
-                    col_map[key] = idx
-                    break
-            if key in col_map:
-                break
 
-    # Если не нашли заголовки — используем порядок по умолчанию: 0=num, 1=code, 2=name, 3=unit, 4=volume, 5=price, 6=total, 7=overhead, 8=profit
+    # Ищем строку заголовков по всему файлу
+    header_idx, col_map = _find_header_row(rows)
+
+    # Если заголовки не найдены — пробуем fallback по умолчанию
     if not col_map:
         col_map = {
             "num": 0, "normCode": 1, "name": 2, "unit": 3,
             "volume": 4, "price": 5, "total": 6, "overhead": 7, "profit": 8,
         }
+        header_idx = -1
+
+    start = header_idx + 1 if header_idx >= 0 else 0
+
+    # Пропускаем строки-подзаголовки сразу после заголовка (например, строку с нумерацией "1 2 3 4 ...")
+    if start < len(rows):
+        check_row = [str(c).strip() if c is not None else "" for c in rows[start]]
+        if all(re.match(r"^\d{1,2}$", v) for v in check_row if v):
+            start += 1
 
     result = []
-    header_keywords = ("наименование", "название", "код", "номер", "name", "code", "№", "поз")
-    first_str = " ".join(first)
-    start = 1 if any(first) and any(kw in first_str for kw in header_keywords) else 0
     for row in rows[start:]:
         if not isinstance(row, (list, tuple)):
             continue
         arr = list(row) if isinstance(row, tuple) else row
         if not arr or all(v is None or (isinstance(v, str) and not str(v).strip()) for v in arr):
             continue
-        first_cell = str(arr[0]).strip().lower() if arr else ""
+
+        # Пропускаем строки-разделители
+        first_cell = str(arr[0]).strip().lower() if arr[0] is not None else ""
+        # Проверяем первые непустые ячейки на наличие «раздел», «итого» и т.д.
+        row_text = " ".join(str(c).strip().lower() for c in arr[:4] if c is not None)
+        if any(row_text.startswith(sp) for sp in _SKIP_PREFIXES):
+            continue
         if first_cell in ("итого", "всего", "total", "сумма") or first_cell.startswith("итого"):
             continue
+        # Пропускаем строки «Раздел N» или текстовые заголовки секций
+        if re.match(r"^раздел\b", first_cell):
+            continue
+
         p: dict[str, Any] = {}
         for key, idx in col_map.items():
             if idx < len(arr) and arr[idx] is not None:
                 p[key] = arr[idx]
-        if p.get("name") or p.get("normCode") or p.get("total") is not None or _safe_float(p.get("volume")) or _safe_float(p.get("price")):
+
+        # Позиция валидна, если есть хотя бы имя/код и числовые значения
+        has_name = bool(p.get("name") or p.get("normCode"))
+        has_numbers = _safe_float(p.get("volume")) > 0 or _safe_float(p.get("price")) > 0 or _safe_float(p.get("total")) > 0
+        if has_name and has_numbers:
             if "total" not in p and ("volume" in p or "price" in p):
                 p["total"] = _safe_float(p.get("volume")) * _safe_float(p.get("price"))
             result.append(p)

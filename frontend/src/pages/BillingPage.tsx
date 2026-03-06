@@ -13,6 +13,7 @@ import {
 } from '../billing/billingConfig';
 import type { PlanTier, BillingPlan, Invoice, PaymentLog } from '../billing/billingTypes';
 import * as billingApi from '../api/billing';
+import { createTochkaPayment, checkTochkaConnection } from '../api/tochkaPayments';
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   trial: { label: 'Пробный период', color: 'var(--color-primary)' },
@@ -46,14 +47,45 @@ export function BillingPage() {
   const [logs, setLogs] = useState<PaymentLog[]>([]);
   const [activeTab, setActiveTab] = useState<'plan' | 'history' | 'logs'>('plan');
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [tochkaConnected, setTochkaConnected] = useState<boolean | null>(null);
+  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const [paymentError, setPaymentError] = useState('');
 
   useEffect(() => {
     billingApi.getInvoices().then(setInvoices).catch(() => {});
     billingApi.getPaymentLogs().then(setLogs).catch(() => {});
   }, [subscription]);
 
+  useEffect(() => {
+    checkTochkaConnection()
+      .then((res) => setTochkaConnected(res.connected))
+      .catch(() => setTochkaConnected(false));
+  }, []);
+
   const handleSubscribe = async () => {
     setPaymentSuccess(false);
+    setPaymentError('');
+    setPaymentUrl(null);
+
+    // Если Точка подключена — создаём платёжную ссылку
+    if (tochkaConnected) {
+      try {
+        const result = await createTochkaPayment({
+          plan_tier: selectedTier,
+          plan_interval: selectedInterval,
+          amount,
+        });
+        if (result.payment_url) {
+          setPaymentUrl(result.payment_url);
+          return;
+        }
+      } catch (e) {
+        setPaymentError(e instanceof Error ? e.message : 'Ошибка создания платежа');
+        return;
+      }
+    }
+
+    // Fallback: mock-оплата
     const invoice = await subscribe(selectedTier, selectedInterval);
     if (invoice && invoice.status === 'paid') {
       setPaymentSuccess(true);
@@ -95,6 +127,12 @@ export function BillingPage() {
       {paymentSuccess && (
         <div className="alert alert--success" style={{ marginBottom: 20 }}>
           Оплата прошла успешно! Подписка активирована.
+        </div>
+      )}
+
+      {paymentError && (
+        <div className="alert alert--error" style={{ marginBottom: 20 }}>
+          {paymentError}
         </div>
       )}
 
@@ -332,6 +370,52 @@ export function BillingPage() {
                 </tbody>
               </table>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Модальное окно с платёжной ссылкой Точка */}
+      {paymentUrl && (
+        <div
+          onClick={() => setPaymentUrl(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 16, maxWidth: 480, width: '100%', boxShadow: '0 24px 80px rgba(0,0,0,0.18)', overflow: 'hidden' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px 0' }}>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Оплата через Точка Банк</h3>
+              <button type="button" onClick={() => setPaymentUrl(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8', padding: 0, lineHeight: 1 }}>&times;</button>
+            </div>
+            <div style={{ padding: '16px 24px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '14px 16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span style={{ color: '#64748b', fontSize: 13 }}>Тариф</span>
+                  <span style={{ fontWeight: 600 }}>{BILLING_CONFIG.tiers[selectedTier].label} ({selectedInterval === 'monthly' ? 'мес.' : 'год'})</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#64748b', fontSize: 13 }}>К оплате</span>
+                  <span style={{ fontWeight: 700, fontSize: 18, color: '#16a34a' }}>{formatPrice(amount)}</span>
+                </div>
+              </div>
+              <p style={{ margin: 0, fontSize: 13, color: '#64748b', lineHeight: 1.5 }}>
+                Вы будете перенаправлены на защищённую страницу оплаты банка Точка. Доступна оплата банковской картой и через СБП.
+              </p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" className="btn btn--secondary" style={{ flex: 1 }} onClick={() => setPaymentUrl(null)}>Отмена</button>
+                <a
+                  href={paymentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn--primary"
+                  style={{ flex: 2, textAlign: 'center', textDecoration: 'none' }}
+                  onClick={() => setPaymentUrl(null)}
+                >
+                  Перейти к оплате
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -4,7 +4,7 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { createWorkLog, getWorkLog, updateWorkLog, uploadWorkLogPhotos } from '../api/workLogs';
-import { getWorkTypes } from '../api/workTypes';
+import { getWorkTypes, createWorkType } from '../api/workTypes';
 import { getCrews } from '../api/crews';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { FileUpload } from '../components/FileUpload';
@@ -23,6 +23,9 @@ export function WorkLogFormPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [photos, setPhotos] = useState<File[]>([]);
+  const [showNewRate, setShowNewRate] = useState(false);
+  const [newRateForm, setNewRateForm] = useState({ name: '', unit: '', rate: 0, category: '' });
+  const [savingRate, setSavingRate] = useState(false);
 
   const [form, setForm] = useState<WorkLogCreate>({
     project_id: projId,
@@ -72,11 +75,37 @@ export function WorkLogFormPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
+    if (name === 'work_type_id' && value === '__new__') {
+      setShowNewRate(true);
+      setNewRateForm({ name: '', unit: '', rate: 0, category: '' });
+      return;
+    }
     const isNumeric = type === 'number' || name.endsWith('_id') || name === 'volume' || name === 'accrued_amount';
     setForm((prev) => ({
       ...prev,
       [name]: isNumeric ? (value === '' ? 0 : Number(value)) : value,
     }));
+  };
+
+  const handleCreateRate = async () => {
+    if (!newRateForm.name.trim() || !newRateForm.unit.trim()) return;
+    setSavingRate(true);
+    try {
+      const created = await createWorkType({
+        name: newRateForm.name.trim(),
+        unit: newRateForm.unit.trim(),
+        rate: newRateForm.rate,
+        category: newRateForm.category.trim() || undefined,
+        is_active: true,
+      });
+      setWorkTypes((prev) => [...prev, created]);
+      setForm((prev) => ({ ...prev, work_type_id: created.id }));
+      setShowNewRate(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка создания расценки');
+    } finally {
+      setSavingRate(false);
+    }
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -117,6 +146,7 @@ export function WorkLogFormPage() {
             {workTypes.map((wt) => (
               <option key={wt.id} value={wt.id}>{wt.name} ({wt.unit}, {formatMoney(wt.rate)}/ед.)</option>
             ))}
+            <option value="__new__">+ Добавить расценку...</option>
           </select>
         </div>
 
@@ -164,6 +194,49 @@ export function WorkLogFormPage() {
           </div>
         </div>
       </form>
+
+      {showNewRate && (
+        <div
+          onClick={() => setShowNewRate(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 16, maxWidth: 440, width: '100%', boxShadow: '0 24px 80px rgba(0,0,0,0.18)', overflow: 'hidden' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px 0' }}>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Новая расценка</h3>
+              <button type="button" onClick={() => setShowNewRate(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8', padding: 0, lineHeight: 1 }}>&times;</button>
+            </div>
+            <div style={{ padding: '16px 24px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div className="form-group">
+                <label className="form-label">Наименование *</label>
+                <input className="input" value={newRateForm.name} onChange={(e) => setNewRateForm((f) => ({ ...f, name: e.target.value }))} placeholder="Устройство стяжки" autoFocus />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="form-group">
+                  <label className="form-label">Ед. измерения *</label>
+                  <input className="input" value={newRateForm.unit} onChange={(e) => setNewRateForm((f) => ({ ...f, unit: e.target.value }))} placeholder="м², м³, шт." />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Расценка (₽) *</label>
+                  <input className="input" type="number" min={0} step={0.01} value={newRateForm.rate === 0 ? '' : newRateForm.rate} onChange={(e) => setNewRateForm((f) => ({ ...f, rate: e.target.value === '' ? 0 : Number(e.target.value) }))} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Категория</label>
+                <input className="input" value={newRateForm.category} onChange={(e) => setNewRateForm((f) => ({ ...f, category: e.target.value }))} placeholder="Опционально" />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+                <button type="button" className="btn btn--secondary" onClick={() => setShowNewRate(false)}>Отмена</button>
+                <button type="button" className="btn btn--primary" onClick={handleCreateRate} disabled={savingRate || !newRateForm.name.trim() || !newRateForm.unit.trim()}>
+                  {savingRate ? 'Создание...' : 'Создать'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

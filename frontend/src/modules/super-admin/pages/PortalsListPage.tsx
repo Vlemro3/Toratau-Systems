@@ -163,7 +163,7 @@ export function PortalsListPage() {
       />
 
       {showForm && (
-        <div className="modal">
+        <div className="modal-overlay">
           <div className="modal__content">
             <div className="modal__header">
               <h3>Создать портал</h3>

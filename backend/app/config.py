@@ -10,8 +10,17 @@ class Settings(BaseSettings):
     superadmin_login: str = "superadmin"
     superadmin_password: str = "superadmin123"
     openai_api_key: str = ""
-    # Модель OpenAI для модуля смет (gpt-4.1, gpt-4.1-mini, gpt-4o и т.д.)
     openai_estimate_model: str = "gpt-4.1"
+    anthropic_api_key: str = ""
+    anthropic_estimate_model: str = "claude-sonnet-4-20250514"
+    # Tochka Bank integration
+    tochka_api_url: str = "https://enter.tochka.com/uapi"
+    tochka_customer_code: str = ""
+    tochka_api_token: str = ""
+    tochka_merchant_id: str = ""
+    tochka_webhook_secret: str = ""
+    tochka_redirect_url: str = "https://app.example.com/billing?payment=success"
+    tochka_fail_redirect_url: str = "https://app.example.com/billing?payment=fail"
 
     class Config:
         env_file = ".env"
