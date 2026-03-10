@@ -13,10 +13,10 @@ class Settings(BaseSettings):
     openai_estimate_model: str = "gpt-4.1"
     anthropic_api_key: str = ""
     anthropic_estimate_model: str = "claude-sonnet-4-20250514"
-    # Tochka Bank integration
+    # Tochka Bank integration (интернет-эквайринг)
     tochka_api_url: str = "https://enter.tochka.com/uapi"
+    tochka_jwt_token: str = ""
     tochka_customer_code: str = ""
-    tochka_api_token: str = ""
     tochka_merchant_id: str = ""
     tochka_webhook_secret: str = ""
     tochka_redirect_url: str = "https://app.example.com/billing?payment=success"

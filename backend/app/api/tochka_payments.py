@@ -1,9 +1,10 @@
 """
-API роутер для интеграции с банком Точка.
+API роутер для интеграции с банком Точка — Интернет-эквайринг.
 
 Endpoints:
 - POST /tochka/create-payment — создать платёжную ссылку для оплаты подписки
-- GET  /tochka/payment-status/{payment_id} — проверить статус платежа
+- GET  /tochka/payment-status/{operation_id} — получить информацию по операции
+- GET  /tochka/payments — список операций (с фильтром по датам)
 - POST /tochka/webhook — webhook от Точки при изменении статуса платежа
 - GET  /tochka/check-connection — проверить подключение к API Точка
 """
@@ -11,14 +12,16 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, HTTPException, Request, Depends, Query
 from pydantic import BaseModel
 
 from app.dependencies import get_current_user, require_admin
 from app.services.tochka_payment import (
     create_payment_link,
-    get_payment_status,
+    get_payment_info,
+    get_payment_list,
     get_retailers,
+    get_customers,
     verify_webhook_signature,
     TochkaPaymentError,
 )
@@ -63,7 +66,7 @@ async def create_payment(req: CreatePaymentRequest, user=Depends(require_admin))
     if abs(req.amount - expected_amount) > 1:
         raise HTTPException(400, f"Некорректная сумма. Ожидается {expected_amount} ₽")
 
-    purpose = req.purpose or f"Подписка Стройтранс — {req.plan_tier} ({req.plan_interval})"
+    purpose = req.purpose or f"Подписка ТОРАТАУ — {req.plan_tier} ({req.plan_interval})"
     payment_link_id = f"sub_{user.id}_{req.plan_tier}_{req.plan_interval}_{int(datetime.utcnow().timestamp())}"
 
     try:
@@ -85,11 +88,25 @@ async def create_payment(req: CreatePaymentRequest, user=Depends(require_admin))
         raise HTTPException(502, str(e))
 
 
-@router.get("/payment-status/{payment_id}")
-async def check_payment_status(payment_id: str, user=Depends(get_current_user)):
-    """Проверить статус платежа."""
+@router.get("/payment-status/{operation_id}")
+async def check_payment_status(operation_id: str, user=Depends(get_current_user)):
+    """Получить информацию по операции (operationId из webhook или списка)."""
     try:
-        result = await get_payment_status(payment_id)
+        result = await get_payment_info(operation_id)
+        return result
+    except TochkaPaymentError as e:
+        raise HTTPException(502, str(e))
+
+
+@router.get("/payments")
+async def list_payments(
+    from_date: Optional[str] = Query(None, description="Дата начала (YYYY-MM-DD)"),
+    to_date: Optional[str] = Query(None, description="Дата конца (YYYY-MM-DD)"),
+    user=Depends(require_admin),
+):
+    """Получить список платёжных операций (рекомендуется указывать даты)."""
+    try:
+        result = await get_payment_list(from_date=from_date, to_date=to_date)
         return result
     except TochkaPaymentError as e:
         raise HTTPException(502, str(e))
@@ -115,9 +132,13 @@ async def tochka_webhook(request: Request):
     event_type = data.get("eventType", "")
     payment_data = data.get("data", {})
     payment_id = payment_data.get("paymentLinkId", "")
+    operation_id = payment_data.get("operationId", "")
     status = payment_data.get("status", "")
 
-    logger.info("Tochka webhook: event=%s, payment_id=%s, status=%s", event_type, payment_id, status)
+    logger.info(
+        "Tochka webhook: event=%s, payment_id=%s, operation_id=%s, status=%s",
+        event_type, payment_id, operation_id, status,
+    )
 
     if event_type == "acquiringInternetPayment" and status == "EXECUTED":
         # Платёж успешен — здесь нужно обновить статус подписки
@@ -139,22 +160,30 @@ async def tochka_webhook(request: Request):
 
 @router.get("/check-connection")
 async def check_connection(user=Depends(require_admin)):
-    """Проверить подключение к API Точка Банка."""
-    if not settings.tochka_api_token:
+    """Проверить подключение к API Точка Банка: JWT-токен + статус эквайринга."""
+    if not settings.tochka_jwt_token:
         return {
             "connected": False,
-            "message": "API ключ Точка не настроен. Укажите TOCHKA_API_TOKEN в .env",
+            "message": "JWT-токен Точка не настроен. Укажите TOCHKA_JWT_TOKEN в .env",
         }
 
+    result: dict = {"connected": False, "message": ""}
+
+    # 1. Проверяем список клиентов (customerCode)
+    try:
+        customers = await get_customers()
+        result["customers"] = customers
+    except TochkaPaymentError as e:
+        result["message"] = f"Ошибка получения клиентов: {e}"
+        return result
+
+    # 2. Проверяем статус эквайринга (retailers)
     try:
         retailers = await get_retailers()
-        return {
-            "connected": True,
-            "retailers": retailers,
-            "message": "Подключение к Точка Банку установлено",
-        }
+        result["retailers"] = retailers
+        result["connected"] = True
+        result["message"] = "Подключение к Точка Банку установлено"
     except TochkaPaymentError as e:
-        return {
-            "connected": False,
-            "message": str(e),
-        }
+        result["message"] = f"Ошибка получения торговых точек: {e}"
+
+    return result

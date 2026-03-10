@@ -1,7 +1,15 @@
 """
-Сервис интеграции с банком Точка — Платёжные ссылки (Payment Links API).
+Сервис интеграции с банком Точка — Интернет-эквайринг.
 
-Документация: https://developers.tochka.com/docs/tochka-api/opisanie-metodov/platyozhnye-ssylki
+Документация:
+- Платёжные ссылки: https://developers.tochka.com/docs/tochka-api/opisanie-metodov/platyozhnye-ssylki
+- Get Customers:    https://enter.tochka.com/uapi/open-banking/v1.0/customers
+- Get Retailers:    https://enter.tochka.com/uapi/acquiring/v1.0/retailers
+- Create Payment:   https://enter.tochka.com/uapi/acquiring/v1.0/payments
+- Get Payments:     https://enter.tochka.com/uapi/acquiring/v1.0/payments
+- Get Payment Info: https://enter.tochka.com/uapi/acquiring/v1.0/payments/{operationId}
+
+Авторизация: JWT-токен (Bearer), генерируется в ЛК Точка → Сервисы → Интеграции и API.
 
 Основной flow:
 1. Backend создаёт платёжную ссылку через Tochka API
@@ -10,7 +18,6 @@
 4. Backend обновляет статус подписки
 """
 import logging
-from datetime import datetime
 from typing import Optional
 import httpx
 
@@ -28,10 +35,87 @@ class TochkaPaymentError(Exception):
 
 def _headers() -> dict[str, str]:
     return {
-        "Authorization": f"Bearer {settings.tochka_api_token}",
+        "Authorization": f"Bearer {settings.tochka_jwt_token}",
         "Content-Type": "application/json",
     }
 
+
+# ──────────────────────────────────────────────────
+# Customers — получение customerCode
+# ──────────────────────────────────────────────────
+
+async def get_customers() -> list[dict]:
+    """
+    Получить список клиентов (GET /open-banking/v1.0/customers).
+    customerCode берётся из записи с customerType == "Business".
+    """
+    url = f"{TOCHKA_BASE}/open-banking/v1.0/customers"
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        try:
+            resp = await client.get(url, headers=_headers())
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPStatusError as e:
+            body = e.response.text
+            logger.error("Tochka get_customers error %s: %s", e.response.status_code, body)
+            raise TochkaPaymentError(f"Ошибка получения клиентов ({e.response.status_code}): {body}")
+        except httpx.RequestError as e:
+            raise TochkaPaymentError(f"Ошибка соединения: {str(e)}")
+
+
+async def resolve_customer_code() -> str:
+    """
+    Определить customerCode: из настроек или автоматически через API.
+    """
+    if settings.tochka_customer_code:
+        return settings.tochka_customer_code
+
+    customers = await get_customers()
+    # Ищем customerType == "Business"
+    data = customers if isinstance(customers, list) else customers.get("customers", customers.get("data", []))
+    for c in data:
+        if c.get("customerType") == "Business":
+            code = c.get("customerCode", "")
+            if code:
+                logger.info("Tochka: resolved customerCode=%s (Business)", code)
+                return code
+    # Если Business не нашёлся, берём первый
+    if data:
+        code = data[0].get("customerCode", "")
+        if code:
+            logger.warning("Tochka: Business customer not found, using first: %s", code)
+            return code
+    raise TochkaPaymentError("Не удалось определить customerCode. Укажите TOCHKA_CUSTOMER_CODE в .env")
+
+
+# ──────────────────────────────────────────────────
+# Retailers — проверка подключения эквайринга
+# ──────────────────────────────────────────────────
+
+async def get_retailers() -> dict:
+    """
+    Получить список торговых точек (GET /acquiring/v1.0/retailers).
+    Статус REG + isActive: true = эквайринг подключён.
+    """
+    url = f"{TOCHKA_BASE}/acquiring/v1.0/retailers"
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        try:
+            resp = await client.get(url, headers=_headers())
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPStatusError as e:
+            body = e.response.text
+            logger.error("Tochka get_retailers error %s: %s", e.response.status_code, body)
+            raise TochkaPaymentError(f"Ошибка Tochka API ({e.response.status_code}): {body}")
+        except httpx.RequestError as e:
+            raise TochkaPaymentError(f"Ошибка соединения: {str(e)}")
+
+
+# ──────────────────────────────────────────────────
+# Payments — создание и получение платежей
+# ──────────────────────────────────────────────────
 
 async def create_payment_link(
     amount: float,
@@ -41,25 +125,26 @@ async def create_payment_link(
     payment_modes: Optional[list[str]] = None,
 ) -> dict:
     """
-    Создаёт платёжную ссылку в Точка Банке.
+    Создаёт платёжную ссылку (POST /acquiring/v1.0/payments).
 
     Args:
         amount: Сумма платежа в рублях
         purpose: Назначение платежа (видно покупателю)
         payment_link_id: Уникальный ID заказа (опционально)
-        ttl: Время жизни ссылки в минутах (по умолчанию 7 дней)
+        ttl: Время жизни ссылки в минутах (макс 44640 = 31 день)
         payment_modes: Способы оплаты ["card", "sbp", "tinkoff"]
 
     Returns:
         dict с полями: paymentLinkId, paymentUrl, status
     """
-    if not settings.tochka_api_token or not settings.tochka_customer_code:
-        raise TochkaPaymentError("Tochka API не настроен. Укажите TOCHKA_API_TOKEN и TOCHKA_CUSTOMER_CODE в .env")
+    if not settings.tochka_jwt_token:
+        raise TochkaPaymentError("Tochka API не настроен. Укажите TOCHKA_JWT_TOKEN в .env")
 
+    customer_code = await resolve_customer_code()
     url = f"{TOCHKA_BASE}/acquiring/v1.0/payments"
 
     payload: dict = {
-        "customerCode": settings.tochka_customer_code,
+        "customerCode": customer_code,
         "amount": round(amount, 2),
         "purpose": purpose,
         "redirectUrl": settings.tochka_redirect_url,
@@ -92,11 +177,12 @@ async def create_payment_link(
             raise TochkaPaymentError(f"Ошибка соединения с Tochka: {str(e)}")
 
 
-async def get_payment_status(payment_id: str) -> dict:
+async def get_payment_info(operation_id: str) -> dict:
     """
-    Получить статус платежа по ID.
+    Получить информацию по одной операции (GET /acquiring/v1.0/payments/{operationId}).
+    operationId можно получить из webhook или из списка операций.
     """
-    url = f"{TOCHKA_BASE}/acquiring/v1.0/payments/{payment_id}"
+    url = f"{TOCHKA_BASE}/acquiring/v1.0/payments/{operation_id}"
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         try:
@@ -104,32 +190,43 @@ async def get_payment_status(payment_id: str) -> dict:
             resp.raise_for_status()
             return resp.json()
         except httpx.HTTPStatusError as e:
-            raise TochkaPaymentError(f"Ошибка получения статуса ({e.response.status_code})")
+            body = e.response.text
+            raise TochkaPaymentError(f"Ошибка получения операции ({e.response.status_code}): {body}")
         except httpx.RequestError as e:
             raise TochkaPaymentError(f"Ошибка соединения: {str(e)}")
 
 
-async def get_retailers() -> dict:
+async def get_payment_list(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+) -> dict:
     """
-    Получить список торговых точек (проверка подключения).
+    Получить список операций (GET /acquiring/v1.0/payments).
+    Рекомендуется указывать fromDate и toDate (формат YYYY-MM-DD).
     """
-    url = f"{TOCHKA_BASE}/acquiring/v1.0/retailers"
+    url = f"{TOCHKA_BASE}/acquiring/v1.0/payments"
+    params: dict = {}
+    if from_date:
+        params["fromDate"] = from_date
+    if to_date:
+        params["toDate"] = to_date
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         try:
-            resp = await client.get(url, headers=_headers())
+            resp = await client.get(url, params=params, headers=_headers())
             resp.raise_for_status()
             return resp.json()
         except httpx.HTTPStatusError as e:
-            raise TochkaPaymentError(f"Ошибка Tochka API ({e.response.status_code})")
+            body = e.response.text
+            raise TochkaPaymentError(f"Ошибка получения списка операций ({e.response.status_code}): {body}")
         except httpx.RequestError as e:
             raise TochkaPaymentError(f"Ошибка соединения: {str(e)}")
 
 
 def verify_webhook_signature(payload: bytes, signature: str) -> bool:
     """
-    Проверка подписи webhook от Точка (если настроен секрет).
-    На данный момент Точка использует простую верификацию по IP и/или bearer token.
+    Проверка подписи webhook от Точка.
+    Если tochka_webhook_secret не задан — пропускаем проверку.
     """
     if not settings.tochka_webhook_secret:
         return True
