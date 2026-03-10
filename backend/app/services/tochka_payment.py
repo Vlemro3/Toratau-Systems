@@ -194,7 +194,7 @@ async def create_payment_link(
         "purpose": purpose,
         "redirectUrl": settings.tochka_redirect_url,
         "failRedirectUrl": settings.tochka_fail_redirect_url,
-        "paymentMode": payment_modes or ["card", "sbp", "tpay"],
+        "paymentMode": payment_modes or ["card", "sbp"],
         "ttl": ttl,
     }
 
