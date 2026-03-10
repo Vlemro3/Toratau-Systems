@@ -55,7 +55,8 @@ async def get_customers() -> list[dict]:
         try:
             resp = await client.get(url, headers=_headers())
             resp.raise_for_status()
-            return resp.json()
+            raw = resp.json()
+            return raw.get("Data", raw)
         except httpx.HTTPStatusError as e:
             body = e.response.text
             logger.error("Tochka get_customers error %s: %s", e.response.status_code, body)
@@ -104,13 +105,53 @@ async def get_retailers() -> dict:
         try:
             resp = await client.get(url, headers=_headers())
             resp.raise_for_status()
-            return resp.json()
+            raw = resp.json()
+            return raw.get("Data", raw)
         except httpx.HTTPStatusError as e:
             body = e.response.text
             logger.error("Tochka get_retailers error %s: %s", e.response.status_code, body)
             raise TochkaPaymentError(f"Ошибка Tochka API ({e.response.status_code}): {body}")
         except httpx.RequestError as e:
             raise TochkaPaymentError(f"Ошибка соединения: {str(e)}")
+
+
+async def resolve_merchant_id() -> str:
+    """
+    Определить merchantId: из настроек или автоматически через Get Retailers API.
+    Ищем retailer с status == 'REG' и isActive == True.
+    """
+    if settings.tochka_merchant_id:
+        return settings.tochka_merchant_id
+
+    retailers_data = await get_retailers()
+    retailers = []
+    if isinstance(retailers_data, list):
+        retailers = retailers_data
+    elif isinstance(retailers_data, dict):
+        retailers = retailers_data.get("retailers", retailers_data.get("Retailers", []))
+        if not retailers and "merchantId" in retailers_data:
+            retailers = [retailers_data]
+
+    for r in retailers:
+        status = r.get("status", r.get("Status", ""))
+        is_active = r.get("isActive", r.get("IsActive", False))
+        mid = r.get("merchantId", r.get("MerchantId", ""))
+        if status == "REG" and is_active and mid:
+            logger.info("Tochka: resolved merchantId=%s (REG, active)", mid)
+            return mid
+
+    # Если REG не нашёлся, берём первый с merchantId
+    for r in retailers:
+        mid = r.get("merchantId", r.get("MerchantId", ""))
+        if mid:
+            logger.warning("Tochka: active retailer not found, using first: %s", mid)
+            return mid
+
+    logger.error("Tochka retailers response: %s", retailers_data)
+    raise TochkaPaymentError(
+        "Не удалось определить merchantId из Get Retailers. "
+        "Убедитесь что интернет-эквайринг подключён (status=REG, isActive=true)."
+    )
 
 
 # ──────────────────────────────────────────────────
@@ -139,15 +180,14 @@ async def create_payment_link(
     """
     if not settings.tochka_jwt_token:
         raise TochkaPaymentError("Tochka API не настроен. Укажите TOCHKA_JWT_TOKEN в .env")
-    if not settings.tochka_merchant_id:
-        raise TochkaPaymentError("TOCHKA_MERCHANT_ID не задан. Укажите Логин из настроек интернет-эквайринга.")
 
     customer_code = await resolve_customer_code()
+    merchant_id = await resolve_merchant_id()
     url = f"{TOCHKA_BASE}/acquiring/v1.0/payments"
 
     inner: dict = {
         "customerCode": customer_code,
-        "merchantId": settings.tochka_merchant_id,
+        "merchantId": merchant_id,
         "amount": round(amount, 2),
         "purpose": purpose,
         "redirectUrl": settings.tochka_redirect_url,
