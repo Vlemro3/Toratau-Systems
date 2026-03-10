@@ -40,6 +40,17 @@ class InvoiceIdRequest(BaseModel):
 
 # ── Helpers ──
 
+def _fmt_dt(dt) -> str | None:
+    """Format datetime to ISO string with Z suffix, handling timezone-aware datetimes from PostgreSQL."""
+    if dt is None:
+        return None
+    s = dt.isoformat()
+    if s.endswith('+00:00'):
+        return s[:-6] + 'Z'
+    if '+' in s[10:] or s.endswith('Z'):
+        return s
+    return s + 'Z'
+
 def _sub_to_dict(sub: models.Subscription) -> dict:
     return {
         "id": sub.id,
@@ -48,15 +59,15 @@ def _sub_to_dict(sub: models.Subscription) -> dict:
         "plan": sub.plan_interval,
         "planTier": sub.plan_tier,
         "planInterval": sub.plan_interval,
-        "currentPeriodStart": sub.current_period_start.isoformat() + "Z" if sub.current_period_start else None,
-        "currentPeriodEnd": sub.current_period_end.isoformat() + "Z" if sub.current_period_end else None,
-        "trialEndsAt": sub.trial_ends_at.isoformat() + "Z" if sub.trial_ends_at else None,
-        "cancelledAt": sub.cancelled_at.isoformat() + "Z" if sub.cancelled_at else None,
-        "blockedAt": sub.blocked_at.isoformat() + "Z" if sub.blocked_at else None,
+        "currentPeriodStart": _fmt_dt(sub.current_period_start),
+        "currentPeriodEnd": _fmt_dt(sub.current_period_end),
+        "trialEndsAt": _fmt_dt(sub.trial_ends_at),
+        "cancelledAt": _fmt_dt(sub.cancelled_at),
+        "blockedAt": _fmt_dt(sub.blocked_at),
         "blockedReason": sub.blocked_reason,
         "previousStatus": sub.previous_status,
-        "createdAt": sub.created_at.isoformat() + "Z" if sub.created_at else None,
-        "updatedAt": sub.updated_at.isoformat() + "Z" if sub.updated_at else None,
+        "createdAt": _fmt_dt(sub.created_at),
+        "updatedAt": _fmt_dt(sub.updated_at),
     }
 
 
@@ -68,8 +79,8 @@ def _invoice_to_dict(inv: models.BillingInvoice) -> dict:
         "plan": inv.plan_interval,
         "planTier": inv.plan_tier,
         "status": inv.status,
-        "createdAt": inv.created_at.isoformat() + "Z" if inv.created_at else None,
-        "paidAt": inv.paid_at.isoformat() + "Z" if inv.paid_at else None,
+        "createdAt": _fmt_dt(inv.created_at),
+        "paidAt": _fmt_dt(inv.paid_at),
     }
 
 
@@ -80,7 +91,7 @@ def _log_to_dict(log: models.PaymentLog) -> dict:
         "action": log.action,
         "status": log.status,
         "amount": float(log.amount) if log.amount else 0,
-        "timestamp": log.timestamp.isoformat() + "Z" if log.timestamp else None,
+        "timestamp": _fmt_dt(log.timestamp),
         "details": log.details or "",
     }
 
