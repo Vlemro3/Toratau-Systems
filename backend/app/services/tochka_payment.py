@@ -94,16 +94,19 @@ async def resolve_customer_code() -> str:
 # Retailers — проверка подключения эквайринга
 # ──────────────────────────────────────────────────
 
-async def get_retailers() -> dict:
+async def get_retailers(customer_code: Optional[str] = None) -> dict:
     """
     Получить список торговых точек (GET /acquiring/v1.0/retailers).
     Статус REG + isActive: true = эквайринг подключён.
     """
     url = f"{TOCHKA_BASE}/acquiring/v1.0/retailers"
+    params: dict = {}
+    if customer_code:
+        params["customerCode"] = customer_code
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         try:
-            resp = await client.get(url, headers=_headers())
+            resp = await client.get(url, params=params, headers=_headers())
             resp.raise_for_status()
             raw = resp.json()
             return raw.get("Data", raw)
@@ -123,7 +126,8 @@ async def resolve_merchant_id() -> str:
     if settings.tochka_merchant_id:
         return settings.tochka_merchant_id
 
-    retailers_data = await get_retailers()
+    customer_code = await resolve_customer_code()
+    retailers_data = await get_retailers(customer_code)
     retailers = []
     if isinstance(retailers_data, list):
         retailers = retailers_data
