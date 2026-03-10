@@ -365,6 +365,90 @@ class EmployeeResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ---- Organization ----
+class OrganizationCreate(BaseModel):
+    org_type: str = "ip"
+    name: str
+    comment: Optional[str] = None
+    inn: Optional[str] = None
+    kpp: Optional[str] = None
+    address: Optional[str] = None
+    ogrn: Optional[str] = None
+    ogrn_date: Optional[str] = None
+    director_title: Optional[str] = None
+    director_name: Optional[str] = None
+    chief_accountant: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    telegram: Optional[str] = None
+    website: Optional[str] = None
+    edo_operator: Optional[str] = None
+    bank_account: Optional[str] = None
+    personal_account: Optional[str] = None
+    bik: Optional[str] = None
+    bank_name: Optional[str] = None
+    corr_account: Optional[str] = None
+    bank_address: Optional[str] = None
+    sender_type: Optional[str] = None
+    permit_title: Optional[str] = None
+    permit_name: Optional[str] = None
+    release_title: Optional[str] = None
+    release_name: Optional[str] = None
+    responsible_title: Optional[str] = None
+    responsible_name: Optional[str] = None
+    economic_entity: Optional[str] = None
+    invoice_message: Optional[str] = None
+    add_stamp_to_invoice: Optional[bool] = None
+    add_logo_to_invoice: Optional[bool] = None
+    add_qr_to_invoice: Optional[bool] = None
+    add_contacts_to_invoice: Optional[bool] = None
+    act_conditions: Optional[str] = None
+    order_conditions: Optional[str] = None
+
+
+class OrganizationResponse(BaseModel):
+    id: int
+    org_type: str
+    name: str
+    comment: str
+    inn: str
+    kpp: str
+    address: str
+    ogrn: str
+    ogrn_date: str
+    director_title: str
+    director_name: str
+    chief_accountant: str
+    phone: str
+    email: str
+    telegram: str
+    website: str
+    edo_operator: str
+    bank_account: str
+    personal_account: str
+    bik: str
+    bank_name: str
+    corr_account: str
+    bank_address: str
+    sender_type: str
+    permit_title: str
+    permit_name: str
+    release_title: str
+    release_name: str
+    responsible_title: str
+    responsible_name: str
+    economic_entity: str
+    invoice_message: str
+    add_stamp_to_invoice: bool
+    add_logo_to_invoice: bool
+    add_qr_to_invoice: bool
+    add_contacts_to_invoice: bool
+    act_conditions: str
+    order_conditions: str
+    created_at: str
+    model_config = ConfigDict(from_attributes=True)
+
+
 # ---- Superadmin / Portal ----
 class PortalCreate(BaseModel):
     name: str

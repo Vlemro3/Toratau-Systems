@@ -8,7 +8,7 @@ from typing import Any
 
 router = APIRouter(tags=["stubs"])
 
-# --- In-memory хранилище контрагентов (для режима без полного бэкенда контрагентов) ---
+# --- In-memory хранилища (для режима без полного бэкенда) ---
 _counterparties_store: list[dict[str, Any]] = []
 _counterparty_next_id = 1
 
@@ -64,13 +64,7 @@ def get_logs_stub(
     return []
 
 
-# --- Organizations / Counterparties / Documents ---
-@router.get("/organizations")
-def get_organizations_stub(
-    current_user: models.User = Depends(get_current_user),
-):
-    return []
-
+# --- Counterparties / Documents ---
 
 def _counterparty_to_response(c: dict) -> dict:
     return {
