@@ -39,7 +39,7 @@ function formatObjectLimit(limit: number | null): string {
 }
 
 export function BillingPage() {
-  const { subscription, loading, paying, remainingDays, subscribe, refresh } = useSubscription();
+  const { subscription, loading, paying, remainingDays, refresh } = useSubscription();
 
   const [selectedTier, setSelectedTier] = useState<PlanTier>('business');
   const [selectedInterval, setSelectedInterval] = useState<BillingPlan>('monthly');
@@ -55,12 +55,25 @@ export function BillingPage() {
     billingApi.getPaymentLogs().then(setLogs).catch(() => {});
   }, [subscription]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paymentStatus = params.get('payment');
+    if (paymentStatus === 'success') {
+      setPaymentSuccess(true);
+      setTimeout(() => setPaymentSuccess(false), 8000);
+      refresh();
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (paymentStatus === 'fail') {
+      setPaymentError('Оплата не прошла. Попробуйте ещё раз.');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
   const handleSubscribe = async () => {
     setPaymentSuccess(false);
     setPaymentError('');
     setPaymentUrl(null);
 
-    // Всегда пытаемся создать платёжную ссылку через Точку
     try {
       const result = await createTochkaPayment({
         plan_tier: selectedTier,
@@ -71,20 +84,9 @@ export function BillingPage() {
         setPaymentUrl(result.payment_url);
         return;
       }
-    } catch {
-      // Точка не настроена или ошибка — продолжаем к fallback
-    }
-
-    // Fallback: mock-оплата (если Точка не настроена)
-    try {
-      const invoice = await subscribe(selectedTier, selectedInterval);
-      if (invoice && invoice.status === 'paid') {
-        setPaymentSuccess(true);
-        setTimeout(() => setPaymentSuccess(false), 5000);
-      }
-      await refresh();
+      setPaymentError('Не удалось создать ссылку на оплату');
     } catch (e) {
-      setPaymentError(e instanceof Error ? e.message : 'Ошибка оплаты');
+      setPaymentError(e instanceof Error ? e.message : 'Ошибка создания платежа');
     }
   };
 
@@ -394,17 +396,14 @@ export function BillingPage() {
                 </div>
               </div>
               <p style={{ margin: 0, fontSize: 13, color: '#64748b', lineHeight: 1.5 }}>
-                Вы будете перенаправлены на защищённую страницу оплаты банка Точка. Доступна оплата банковской картой и через СБП.
+                Вы будете перенаправлены на защищённую страницу оплаты банка Точка. Доступна оплата банковской картой, через СБП и Tinkoff Pay.
               </p>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button type="button" className="btn btn--secondary" style={{ flex: 1 }} onClick={() => setPaymentUrl(null)}>Отмена</button>
                 <a
                   href={paymentUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="btn btn--primary"
                   style={{ flex: 2, textAlign: 'center', textDecoration: 'none' }}
-                  onClick={() => setPaymentUrl(null)}
                 >
                   Перейти к оплате
                 </a>

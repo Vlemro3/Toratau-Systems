@@ -16,6 +16,9 @@ from fastapi import APIRouter, HTTPException, Request, Depends, Query
 from pydantic import BaseModel
 
 from app.dependencies import get_current_user, require_admin
+from sqlalchemy.orm import Session
+
+from app.database import get_db
 from app.services.tochka_payment import (
     create_payment_link,
     get_payment_info,
@@ -26,6 +29,7 @@ from app.services.tochka_payment import (
     TochkaPaymentError,
 )
 from app.config import settings
+from app import models
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tochka", tags=["Tochka Payments"])
@@ -55,7 +59,11 @@ PLAN_PRICES = {
 
 
 @router.post("/create-payment", response_model=CreatePaymentResponse)
-async def create_payment(req: CreatePaymentRequest, user=Depends(require_admin)):
+async def create_payment(
+    req: CreatePaymentRequest,
+    user=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     """Создать платёжную ссылку для оплаты подписки."""
     if req.plan_tier not in PLAN_PRICES:
         raise HTTPException(400, f"Неизвестный тариф: {req.plan_tier}")
@@ -66,24 +74,65 @@ async def create_payment(req: CreatePaymentRequest, user=Depends(require_admin))
     if abs(req.amount - expected_amount) > 1:
         raise HTTPException(400, f"Некорректная сумма. Ожидается {expected_amount} ₽")
 
+    portal_id = user.portal_id or 0
+    now = datetime.utcnow()
+
+    from app.api.billing import _get_or_create_subscription, _add_log
+    sub = _get_or_create_subscription(db, user)
+
+    invoice = models.BillingInvoice(
+        subscription_id=sub.id,
+        portal_id=portal_id,
+        user_id=user.id,
+        plan_tier=req.plan_tier,
+        plan_interval=req.plan_interval,
+        amount=expected_amount,
+        status="pending",
+        created_at=now,
+    )
+    db.add(invoice)
+    db.commit()
+    db.refresh(invoice)
+
     purpose = req.purpose or f"Подписка ТОРАТАУ — {req.plan_tier} ({req.plan_interval})"
-    payment_link_id = f"sub_{user.id}_{req.plan_tier}_{req.plan_interval}_{int(datetime.utcnow().timestamp())}"
 
     try:
         result = await create_payment_link(
             amount=expected_amount,
             purpose=purpose,
-            payment_link_id=payment_link_id,
+            payment_link_id=str(invoice.id),
             payment_modes=["sbp", "tinkoff", "card"],
+        )
+
+        invoice.tochka_operation_id = result.get("operationId", "")
+        invoice.tochka_payment_link = result.get("paymentLink", "")
+        invoice.tochka_payment_link_id = result.get("paymentLinkId", "")
+
+        sub.previous_status = sub.status
+        sub.status = "pending_payment"
+        sub.plan_tier = req.plan_tier
+        sub.plan_interval = req.plan_interval
+        sub.updated_at = now
+        db.commit()
+
+        _add_log(
+            db, portal_id,
+            action=f"Создана ссылка на оплату ({req.plan_tier}, {req.plan_interval})",
+            status="pending",
+            amount=expected_amount,
+            details=f"Счёт #{invoice.id}, operation={invoice.tochka_operation_id}",
+            invoice_id=invoice.id,
         )
 
         return CreatePaymentResponse(
             payment_url=result.get("paymentLink", result.get("paymentUrl", "")),
-            payment_id=result.get("operationId", result.get("paymentLinkId", payment_link_id)),
+            payment_id=result.get("operationId", result.get("paymentLinkId", str(invoice.id))),
             amount=expected_amount,
             status=result.get("status", "pending"),
         )
     except TochkaPaymentError as e:
+        invoice.status = "failed"
+        db.commit()
         logger.error("Tochka create payment error: %s", str(e))
         raise HTTPException(502, str(e))
 
@@ -113,7 +162,7 @@ async def list_payments(
 
 
 @router.post("/webhook")
-async def tochka_webhook(request: Request):
+async def tochka_webhook(request: Request, db: Session = Depends(get_db)):
     """
     Webhook от Точка Банка при изменении статуса платежа.
     Событие: acquiringInternetPayment
@@ -130,7 +179,7 @@ async def tochka_webhook(request: Request):
         raise HTTPException(400, "Invalid JSON")
 
     event_type = data.get("eventType", "")
-    payment_data = data.get("data", {})
+    payment_data = data.get("data", data.get("Data", {}))
     payment_id = payment_data.get("paymentLinkId", "")
     operation_id = payment_data.get("operationId", "")
     status = payment_data.get("status", "")
@@ -141,19 +190,12 @@ async def tochka_webhook(request: Request):
     )
 
     if event_type == "acquiringInternetPayment" and status == "EXECUTED":
-        # Платёж успешен — здесь нужно обновить статус подписки
-        # payment_id формат: sub_{userId}_{planTier}_{planInterval}_{timestamp}
-        parts = payment_id.split("_")
-        if len(parts) >= 4 and parts[0] == "sub":
-            user_id = int(parts[1])
-            plan_tier = parts[2]
-            plan_interval = parts[3]
-            logger.info(
-                "Tochka: payment successful for user=%d, tier=%s, interval=%s",
-                user_id, plan_tier, plan_interval,
-            )
-            # TODO: обновить подписку пользователя в БД
-            # await activate_subscription(user_id, plan_tier, plan_interval)
+        from app.api.billing import activate_subscription_by_tochka
+        activated = activate_subscription_by_tochka(db, operation_id, payment_id)
+        if activated:
+            logger.info("Tochka webhook: subscription activated for operation=%s", operation_id)
+        else:
+            logger.warning("Tochka webhook: could not activate subscription for operation=%s", operation_id)
 
     return {"status": "ok"}
 
