@@ -64,6 +64,63 @@ def get_logs_stub(
     return []
 
 
+@router.post("/billing/subscribe")
+def subscribe_stub(
+    current_user: models.User = Depends(get_current_user),
+):
+    now = datetime.utcnow()
+    end = now + timedelta(days=30)
+    sub = _default_subscription(current_user.id)
+    invoice = {
+        "id": 1,
+        "userId": current_user.id,
+        "planTier": "business",
+        "planInterval": "monthly",
+        "amount": 3000,
+        "status": "pending",
+        "createdAt": now.isoformat() + "Z",
+    }
+    return {"subscription": sub, "invoice": invoice}
+
+
+@router.post("/billing/simulate-payment-success")
+def simulate_payment_success_stub(
+    current_user: models.User = Depends(get_current_user),
+):
+    now = datetime.utcnow()
+    sub = _default_subscription(current_user.id)
+    sub["status"] = "active"
+    invoice = {
+        "id": 1,
+        "userId": current_user.id,
+        "planTier": "business",
+        "planInterval": "monthly",
+        "amount": 3000,
+        "status": "paid",
+        "createdAt": now.isoformat() + "Z",
+    }
+    return {"subscription": sub, "invoice": invoice}
+
+
+@router.post("/billing/simulate-payment-fail")
+def simulate_payment_fail_stub(
+    current_user: models.User = Depends(get_current_user),
+):
+    now = datetime.utcnow()
+    sub = _default_subscription(current_user.id)
+    sub["status"] = "expired"
+    invoice = {
+        "id": 1,
+        "userId": current_user.id,
+        "planTier": "business",
+        "planInterval": "monthly",
+        "amount": 3000,
+        "status": "failed",
+        "createdAt": now.isoformat() + "Z",
+    }
+    return {"subscription": sub, "invoice": invoice}
+
+
 # --- Counterparties / Documents ---
 
 def _counterparty_to_response(c: dict) -> dict:

@@ -86,12 +86,16 @@ export function BillingPage() {
     }
 
     // Fallback: mock-оплата
-    const invoice = await subscribe(selectedTier, selectedInterval);
-    if (invoice && invoice.status === 'paid') {
-      setPaymentSuccess(true);
-      setTimeout(() => setPaymentSuccess(false), 5000);
+    try {
+      const invoice = await subscribe(selectedTier, selectedInterval);
+      if (invoice && invoice.status === 'paid') {
+        setPaymentSuccess(true);
+        setTimeout(() => setPaymentSuccess(false), 5000);
+      }
+      await refresh();
+    } catch (e) {
+      setPaymentError(e instanceof Error ? e.message : 'Ошибка оплаты');
     }
-    await refresh();
   };
 
   if (loading) {
