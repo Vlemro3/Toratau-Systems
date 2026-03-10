@@ -13,7 +13,7 @@ import {
 } from '../billing/billingConfig';
 import type { PlanTier, BillingPlan, Invoice, PaymentLog } from '../billing/billingTypes';
 import * as billingApi from '../api/billing';
-import { createTochkaPayment, checkTochkaConnection } from '../api/tochkaPayments';
+import { createTochkaPayment } from '../api/tochkaPayments';
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   trial: { label: 'Пробный период', color: 'var(--color-primary)' },
@@ -47,7 +47,6 @@ export function BillingPage() {
   const [logs, setLogs] = useState<PaymentLog[]>([]);
   const [activeTab, setActiveTab] = useState<'plan' | 'history' | 'logs'>('plan');
   const [paymentSuccess, setPaymentSuccess] = useState(false);
-  const [tochkaConnected, setTochkaConnected] = useState<boolean | null>(null);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState('');
 
@@ -56,36 +55,27 @@ export function BillingPage() {
     billingApi.getPaymentLogs().then(setLogs).catch(() => {});
   }, [subscription]);
 
-  useEffect(() => {
-    checkTochkaConnection()
-      .then((res) => setTochkaConnected(res.connected))
-      .catch(() => setTochkaConnected(false));
-  }, []);
-
   const handleSubscribe = async () => {
     setPaymentSuccess(false);
     setPaymentError('');
     setPaymentUrl(null);
 
-    // Если Точка подключена — создаём платёжную ссылку
-    if (tochkaConnected) {
-      try {
-        const result = await createTochkaPayment({
-          plan_tier: selectedTier,
-          plan_interval: selectedInterval,
-          amount,
-        });
-        if (result.payment_url) {
-          setPaymentUrl(result.payment_url);
-          return;
-        }
-      } catch (e) {
-        setPaymentError(e instanceof Error ? e.message : 'Ошибка создания платежа');
+    // Всегда пытаемся создать платёжную ссылку через Точку
+    try {
+      const result = await createTochkaPayment({
+        plan_tier: selectedTier,
+        plan_interval: selectedInterval,
+        amount,
+      });
+      if (result.payment_url) {
+        setPaymentUrl(result.payment_url);
         return;
       }
+    } catch {
+      // Точка не настроена или ошибка — продолжаем к fallback
     }
 
-    // Fallback: mock-оплата
+    // Fallback: mock-оплата (если Точка не настроена)
     try {
       const invoice = await subscribe(selectedTier, selectedInterval);
       if (invoice && invoice.status === 'paid') {
