@@ -186,12 +186,10 @@ async def create_payment_link(
         raise TochkaPaymentError("Tochka API не настроен. Укажите TOCHKA_JWT_TOKEN в .env")
 
     customer_code = await resolve_customer_code()
-    merchant_id = await resolve_merchant_id()
     url = f"{TOCHKA_BASE}/acquiring/v1.0/payments"
 
     inner: dict = {
         "customerCode": customer_code,
-        "merchantId": merchant_id,
         "amount": round(amount, 2),
         "purpose": purpose,
         "redirectUrl": settings.tochka_redirect_url,
@@ -199,6 +197,9 @@ async def create_payment_link(
         "paymentMode": payment_modes or ["card", "sbp", "tpay"],
         "ttl": ttl,
     }
+
+    if settings.tochka_merchant_id:
+        inner["merchantId"] = settings.tochka_merchant_id
 
     if payment_link_id:
         inner["paymentLinkId"] = payment_link_id
