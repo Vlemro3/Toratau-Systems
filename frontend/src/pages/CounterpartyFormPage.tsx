@@ -1,7 +1,8 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, useCallback, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { createCounterparty, getCounterparty, updateCounterparty } from '../api/counterparties';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { useInnAutoFill, useBikAutoFill } from '../hooks/useAutoFill';
 import type { CounterpartyCreate, OrgType } from '../types';
 
 const EMPTY_FORM: CounterpartyCreate = {
@@ -62,6 +63,35 @@ export function CounterpartyFormPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState<CounterpartyCreate>({ ...EMPTY_FORM });
+  const [innLoading, setInnLoading] = useState(false);
+  const [bikLoading, setBikLoading] = useState(false);
+
+  const onInnResult = useCallback((data: { org_type?: string; name?: string; inn?: string; kpp?: string; ogrn?: string; ogrn_date?: string; address?: string; director_title?: string; director_name?: string }) => {
+    setForm((prev) => ({
+      ...prev,
+      ...(data.org_type && { org_type: data.org_type as OrgType }),
+      ...(data.name && { name: data.name }),
+      ...(data.inn && { inn: data.inn }),
+      ...(data.kpp && { kpp: data.kpp }),
+      ...(data.ogrn && { ogrn: data.ogrn }),
+      ...(data.ogrn_date && { ogrn_date: data.ogrn_date }),
+      ...(data.address && { address: data.address }),
+      ...(data.director_title && { director_title: data.director_title }),
+      ...(data.director_name && { director_name: data.director_name }),
+    }));
+  }, []);
+
+  const onBikResult = useCallback((data: { bank_name?: string; corr_account?: string; bank_address?: string }) => {
+    setForm((prev) => ({
+      ...prev,
+      ...(data.bank_name && { bank_name: data.bank_name }),
+      ...(data.corr_account && { corr_account: data.corr_account }),
+      ...(data.bank_address && { bank_address: data.bank_address }),
+    }));
+  }, []);
+
+  const debouncedInnLookup = useInnAutoFill({ onResult: onInnResult, onLoading: setInnLoading });
+  const debouncedBikLookup = useBikAutoFill({ onResult: onBikResult, onLoading: setBikLoading });
 
   useEffect(() => {
     if (isEdit) {
@@ -78,6 +108,13 @@ export function CounterpartyFormPage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
+
+    if (name === 'inn') {
+      debouncedInnLookup(value);
+    }
+    if (name === 'bik') {
+      debouncedBikLookup(value);
+    }
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -145,7 +182,7 @@ export function CounterpartyFormPage() {
 
           <div className="form-row">
             <div className="form-group">
-              <label>ИНН:</label>
+              <label>ИНН: {innLoading && <span style={{ color: 'var(--color-primary)', fontSize: 12, marginLeft: 8 }}>поиск...</span>}</label>
               <input name="inn" value={form.inn} onChange={handleChange} placeholder={isLegal ? '10 цифр' : '12 цифр'} />
             </div>
             {showKpp && (
@@ -242,7 +279,7 @@ export function CounterpartyFormPage() {
             </div>
             <div className="form-row">
               <div className="form-group">
-                <label>БИК:</label>
+                <label>БИК: {bikLoading && <span style={{ color: 'var(--color-primary)', fontSize: 12, marginLeft: 8 }}>поиск...</span>}</label>
                 <input name="bik" value={form.bik} onChange={handleChange} placeholder="9 цифр" />
               </div>
               <div className="form-group">

@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     openai_estimate_model: str = "gpt-4.1"
     anthropic_api_key: str = ""
     anthropic_estimate_model: str = "claude-sonnet-4-20250514"
+    # DaData API (автозаполнение по ИНН/БИК)
+    dadata_api_key: str = ""
     # Tochka Bank integration (интернет-эквайринг)
     tochka_api_url: str = "https://enter.tochka.com/uapi"
     tochka_jwt_token: str = ""
