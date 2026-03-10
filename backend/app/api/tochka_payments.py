@@ -74,14 +74,14 @@ async def create_payment(req: CreatePaymentRequest, user=Depends(require_admin))
             amount=expected_amount,
             purpose=purpose,
             payment_link_id=payment_link_id,
-            payment_modes=["card", "sbp"],
+            payment_modes=["sbp", "tinkoff", "card"],
         )
 
         return CreatePaymentResponse(
-            payment_url=result.get("paymentUrl", ""),
-            payment_id=result.get("paymentLinkId", payment_link_id),
+            payment_url=result.get("paymentLink", result.get("paymentUrl", "")),
+            payment_id=result.get("operationId", result.get("paymentLinkId", payment_link_id)),
             amount=expected_amount,
-            status="pending",
+            status=result.get("status", "pending"),
         )
     except TochkaPaymentError as e:
         logger.error("Tochka create payment error: %s", str(e))
@@ -179,7 +179,9 @@ async def check_connection(user=Depends(require_admin)):
 
     # 2. Проверяем статус эквайринга (retailers)
     try:
-        retailers = await get_retailers()
+        from app.services.tochka_payment import resolve_customer_code
+        customer_code = await resolve_customer_code()
+        retailers = await get_retailers(customer_code)
         result["retailers"] = retailers
         result["connected"] = True
         result["message"] = "Подключение к Точка Банку установлено"
