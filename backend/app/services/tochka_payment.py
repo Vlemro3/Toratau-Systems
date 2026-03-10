@@ -143,7 +143,7 @@ async def create_payment_link(
     customer_code = await resolve_customer_code()
     url = f"{TOCHKA_BASE}/acquiring/v1.0/payments"
 
-    payload: dict = {
+    inner: dict = {
         "customerCode": customer_code,
         "amount": round(amount, 2),
         "purpose": purpose,
@@ -154,10 +154,12 @@ async def create_payment_link(
     }
 
     if settings.tochka_merchant_id:
-        payload["merchantId"] = settings.tochka_merchant_id
+        inner["merchantId"] = settings.tochka_merchant_id
 
     if payment_link_id:
-        payload["paymentLinkId"] = payment_link_id
+        inner["paymentLinkId"] = payment_link_id
+
+    payload = {"Data": inner}
 
     logger.info("Tochka: creating payment link, amount=%.2f, purpose=%s", amount, purpose)
 
@@ -165,7 +167,8 @@ async def create_payment_link(
         try:
             resp = await client.post(url, json=payload, headers=_headers())
             resp.raise_for_status()
-            data = resp.json()
+            raw = resp.json()
+            data = raw.get("Data", raw)
             logger.info("Tochka: payment link created: %s", data.get("paymentUrl", ""))
             return data
         except httpx.HTTPStatusError as e:
@@ -188,7 +191,8 @@ async def get_payment_info(operation_id: str) -> dict:
         try:
             resp = await client.get(url, headers=_headers())
             resp.raise_for_status()
-            return resp.json()
+            raw = resp.json()
+            return raw.get("Data", raw)
         except httpx.HTTPStatusError as e:
             body = e.response.text
             raise TochkaPaymentError(f"Ошибка получения операции ({e.response.status_code}): {body}")
@@ -215,7 +219,8 @@ async def get_payment_list(
         try:
             resp = await client.get(url, params=params, headers=_headers())
             resp.raise_for_status()
-            return resp.json()
+            raw = resp.json()
+            return raw.get("Data", raw)
         except httpx.HTTPStatusError as e:
             body = e.response.text
             raise TochkaPaymentError(f"Ошибка получения списка операций ({e.response.status_code}): {body}")
