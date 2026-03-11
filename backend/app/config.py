@@ -21,8 +21,8 @@ class Settings(BaseSettings):
     tochka_customer_code: str = ""
     tochka_merchant_id: str = ""
     tochka_webhook_secret: str = ""
-    tochka_redirect_url: str = "https://app.example.com/billing?payment=success"
-    tochka_fail_redirect_url: str = "https://app.example.com/billing?payment=fail"
+    tochka_redirect_url: str = "https://программадлястроителей.рф/billing?payment=success"
+    tochka_fail_redirect_url: str = "https://программадлястроителей.рф/billing?payment=fail"
 
     class Config:
         env_file = ".env"

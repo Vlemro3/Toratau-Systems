@@ -49,20 +49,56 @@ export function BillingPage() {
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState('');
+  const [verifying, setVerifying] = useState(false);
 
   useEffect(() => {
     billingApi.getInvoices().then(setInvoices).catch(() => {});
     billingApi.getPaymentLogs().then(setLogs).catch(() => {});
   }, [subscription]);
 
+  /** Проверить статус pending-счёта в Точке (polling fallback) */
+  const handleVerifyPayment = async (invoiceId: number) => {
+    setVerifying(true);
+    setPaymentError('');
+    try {
+      const result = await billingApi.verifyPayment(invoiceId);
+      if (result.verified) {
+        setPaymentSuccess(true);
+        setTimeout(() => setPaymentSuccess(false), 8000);
+        await refresh();
+        billingApi.getInvoices().then(setInvoices).catch(() => {});
+        billingApi.getPaymentLogs().then(setLogs).catch(() => {});
+      } else {
+        setPaymentError(`Статус в Точке: ${result.tochkaStatus || 'неизвестен'}. Попробуйте позже.`);
+      }
+    } catch (e) {
+      setPaymentError(e instanceof Error ? e.message : 'Ошибка проверки оплаты');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const paymentStatus = params.get('payment');
     if (paymentStatus === 'success') {
-      setPaymentSuccess(true);
-      setTimeout(() => setPaymentSuccess(false), 8000);
-      refresh();
       window.history.replaceState({}, '', window.location.pathname);
+      // Auto-verify: найти последний pending invoice и проверить его в Точке
+      billingApi.getInvoices().then((invs) => {
+        setInvoices(invs);
+        const pending = invs.find((i) => i.status === 'pending');
+        if (pending) {
+          handleVerifyPayment(pending.id);
+        } else {
+          setPaymentSuccess(true);
+          setTimeout(() => setPaymentSuccess(false), 8000);
+          refresh();
+        }
+      }).catch(() => {
+        setPaymentSuccess(true);
+        setTimeout(() => setPaymentSuccess(false), 8000);
+        refresh();
+      });
     } else if (paymentStatus === 'fail') {
       setPaymentError('Оплата не прошла. Попробуйте ещё раз.');
       window.history.replaceState({}, '', window.location.pathname);
@@ -319,6 +355,16 @@ export function BillingPage() {
                         >
                           {INVOICE_STATUS[inv.status] || inv.status}
                         </span>
+                        {inv.status === 'pending' && (
+                          <button
+                            className="btn btn--sm btn--secondary"
+                            style={{ marginLeft: 8 }}
+                            onClick={() => handleVerifyPayment(inv.id)}
+                            disabled={verifying}
+                          >
+                            {verifying ? 'Проверка...' : 'Проверить оплату'}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}

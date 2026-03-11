@@ -35,3 +35,8 @@ export function getInvoices(): Promise<Invoice[]> {
 export function getPaymentLogs(): Promise<PaymentLog[]> {
   return api.get<PaymentLog[]>('/billing/logs');
 }
+
+/** Проверить статус оплаты в Точке (polling fallback если webhook не дошёл) */
+export function verifyPayment(invoiceId: number): Promise<{ subscription: Subscription; invoice: Invoice; verified: boolean; tochkaStatus?: string }> {
+  return api.post<{ subscription: Subscription; invoice: Invoice; verified: boolean; tochkaStatus?: string }>(`/billing/verify-payment/${invoiceId}`, {});
+}

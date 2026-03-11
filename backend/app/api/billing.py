@@ -337,6 +337,58 @@ def simulate_payment_fail(
     return {"subscription": _sub_to_dict(sub), "invoice": _invoice_to_dict(invoice)}
 
 
+@router.post("/verify-payment/{invoice_id}")
+async def verify_payment(
+    invoice_id: int,
+    current_user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Проверить статус оплаты в Точке (polling fallback если webhook не дошёл).
+    Запрашивает operationId у Tochka API и активирует подписку при статусе EXECUTED.
+    """
+    portal_id = current_user.portal_id or 0
+    invoice = db.query(models.BillingInvoice).filter(
+        models.BillingInvoice.id == invoice_id,
+        models.BillingInvoice.portal_id == portal_id,
+    ).first()
+    if not invoice:
+        raise HTTPException(404, "Счёт не найден")
+
+    if invoice.status == "paid":
+        sub = _get_or_create_subscription(db, current_user)
+        return {"subscription": _sub_to_dict(sub), "invoice": _invoice_to_dict(invoice), "verified": True}
+
+    operation_id = invoice.tochka_operation_id
+    if not operation_id:
+        raise HTTPException(400, "Нет operationId для проверки в Точке")
+
+    from app.services.tochka_payment import get_payment_info, TochkaPaymentError
+    try:
+        info = await get_payment_info(operation_id)
+    except TochkaPaymentError as e:
+        raise HTTPException(502, f"Ошибка проверки статуса в Точке: {e}")
+
+    tochka_status = info.get("status", "")
+    logger.info("Verify payment: invoice #%d, operation=%s, tochka_status=%s", invoice_id, operation_id, tochka_status)
+
+    if tochka_status == "EXECUTED":
+        activated = activate_subscription_by_tochka(
+            db, operation_id, invoice.tochka_payment_link_id or ""
+        )
+        if activated:
+            db.refresh(invoice)
+            sub = _get_or_create_subscription(db, current_user)
+            return {"subscription": _sub_to_dict(sub), "invoice": _invoice_to_dict(invoice), "verified": True}
+
+    return {
+        "subscription": _sub_to_dict(_get_or_create_subscription(db, current_user)),
+        "invoice": _invoice_to_dict(invoice),
+        "verified": False,
+        "tochkaStatus": tochka_status,
+    }
+
+
 def activate_subscription_by_tochka(
     db: Session,
     operation_id: str,
