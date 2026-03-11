@@ -161,9 +161,66 @@ async def list_payments(
     """Получить список платёжных операций (рекомендуется указывать даты)."""
     try:
         result = await get_payment_list(from_date=from_date, to_date=to_date)
-        return result
+        return {"count": len(result), "payments": result}
     except TochkaPaymentError as e:
         raise HTTPException(502, str(e))
+
+
+@router.get("/debug-verify/{invoice_id}")
+async def debug_verify(
+    invoice_id: int,
+    user=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Диагностический эндпоинт: показывает сырые данные из Точки
+    и логику поиска для конкретного invoice.
+    """
+    invoice = db.query(models.BillingInvoice).filter(
+        models.BillingInvoice.id == invoice_id,
+    ).first()
+    if not invoice:
+        raise HTTPException(404, "Счёт не найден")
+
+    result = {
+        "invoice": {
+            "id": invoice.id,
+            "status": invoice.status,
+            "tochka_operation_id": invoice.tochka_operation_id,
+            "tochka_payment_link_id": invoice.tochka_payment_link_id,
+            "tochka_payment_link": invoice.tochka_payment_link,
+            "amount": float(invoice.amount) if invoice.amount else None,
+            "created_at": str(invoice.created_at),
+        },
+        "search_plid": invoice.tochka_payment_link_id or str(invoice.id),
+        "tochka_payments": [],
+        "matched": None,
+        "error": None,
+    }
+
+    try:
+        from datetime import date
+        today = date.today().isoformat()
+        created = invoice.created_at.strftime("%Y-%m-%d") if invoice.created_at else today
+        payments = await get_payment_list(from_date=created, to_date=today)
+        result["tochka_payments_count"] = len(payments)
+
+        search_plid = result["search_plid"]
+        for p in payments:
+            summary = {
+                "paymentLinkId": p.get("paymentLinkId", ""),
+                "operationId": p.get("operationId", ""),
+                "status": p.get("status", ""),
+                "amount": p.get("amount", ""),
+                "purpose": p.get("purpose", ""),
+            }
+            result["tochka_payments"].append(summary)
+            if summary["paymentLinkId"] == search_plid:
+                result["matched"] = summary
+    except TochkaPaymentError as e:
+        result["error"] = str(e)
+
+    return result
 
 
 @router.post("/webhook")

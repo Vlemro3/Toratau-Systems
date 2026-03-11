@@ -373,26 +373,18 @@ async def verify_payment(
         from datetime import date
         today = date.today().isoformat()
         created = invoice.created_at.strftime("%Y-%m-%d") if invoice.created_at else today
-        payments_data = await get_payment_list(from_date=created, to_date=today)
-
-        # Разобрать ответ — может быть list или dict с ключом payments/Payments
-        payments = []
-        if isinstance(payments_data, list):
-            payments = payments_data
-        elif isinstance(payments_data, dict):
-            payments = payments_data.get("payments", payments_data.get("Payments", []))
-            if not payments and "operationId" in payments_data:
-                payments = [payments_data]
+        payments = await get_payment_list(from_date=created, to_date=today)
 
         logger.info("Verify payment: got %d operations from Tochka, searching for paymentLinkId=%s", len(payments), search_plid)
 
         for p in payments:
             plid = p.get("paymentLinkId", "")
             pstatus = p.get("status", "")
+            logger.info("  operation: paymentLinkId=%s, status=%s, operationId=%s", plid, pstatus, p.get("operationId", ""))
             if plid == search_plid and pstatus in PAID_STATUSES:
                 tochka_status = pstatus
                 found_operation_id = p.get("operationId", "")
-                logger.info("Verify payment: found %s operation, operationId=%s", pstatus, found_operation_id)
+                logger.info("Verify payment: MATCH found — %s, operationId=%s", pstatus, found_operation_id)
                 break
     except TochkaPaymentError as e:
         logger.warning("Verify payment: get_payment_list failed: %s", e)

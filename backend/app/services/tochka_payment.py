@@ -248,24 +248,45 @@ async def get_payment_info(operation_id: str) -> dict:
 async def get_payment_list(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
-) -> dict:
+) -> list:
     """
     Получить список операций (GET /acquiring/v1.0/payments).
     Рекомендуется указывать fromDate и toDate (формат YYYY-MM-DD).
+    Всегда возвращает list[dict].
     """
+    customer_code = await resolve_customer_code()
     url = f"{TOCHKA_BASE}/acquiring/v1.0/payments"
-    params: dict = {}
+    params: dict = {"customerCode": customer_code}
     if from_date:
         params["fromDate"] = from_date
     if to_date:
         params["toDate"] = to_date
+
+    logger.info("Tochka get_payment_list: params=%s", params)
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         try:
             resp = await client.get(url, params=params, headers=_headers())
             resp.raise_for_status()
             raw = resp.json()
-            return raw.get("Data", raw)
+            logger.info("Tochka get_payment_list raw response keys: %s", list(raw.keys()) if isinstance(raw, dict) else type(raw).__name__)
+            data = raw.get("Data", raw) if isinstance(raw, dict) else raw
+
+            # Нормализуем в list
+            if isinstance(data, list):
+                result = data
+            elif isinstance(data, dict):
+                # Может быть {"payments": [...]} или {"Payments": [...]} или одна операция
+                result = data.get("payments", data.get("Payments", []))
+                if not result and "operationId" in data:
+                    result = [data]
+            else:
+                result = []
+
+            logger.info("Tochka get_payment_list: found %d operations", len(result))
+            if result:
+                logger.info("Tochka get_payment_list: first operation keys: %s", list(result[0].keys()) if isinstance(result[0], dict) else type(result[0]).__name__)
+            return result
         except httpx.HTTPStatusError as e:
             body = e.response.text
             raise TochkaPaymentError(f"Ошибка получения списка операций ({e.response.status_code}): {body}")
