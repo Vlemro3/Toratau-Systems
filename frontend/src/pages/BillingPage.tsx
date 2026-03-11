@@ -49,7 +49,7 @@ export function BillingPage() {
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState('');
-  const [verifying, setVerifying] = useState(false);
+  const [verifyingId, setVerifyingId] = useState<number | null>(null);
 
   useEffect(() => {
     billingApi.getInvoices().then(setInvoices).catch(() => {});
@@ -58,7 +58,7 @@ export function BillingPage() {
 
   /** Проверить статус pending-счёта в Точке (polling fallback) */
   const handleVerifyPayment = async (invoiceId: number) => {
-    setVerifying(true);
+    setVerifyingId(invoiceId);
     setPaymentError('');
     try {
       const result = await billingApi.verifyPayment(invoiceId);
@@ -74,7 +74,7 @@ export function BillingPage() {
     } catch (e) {
       setPaymentError(e instanceof Error ? e.message : 'Ошибка проверки оплаты');
     } finally {
-      setVerifying(false);
+      setVerifyingId(null);
     }
   };
 
@@ -360,9 +360,9 @@ export function BillingPage() {
                             className="btn btn--sm btn--secondary"
                             style={{ marginLeft: 8 }}
                             onClick={() => handleVerifyPayment(inv.id)}
-                            disabled={verifying}
+                            disabled={verifyingId !== null}
                           >
-                            {verifying ? 'Проверка...' : 'Проверить оплату'}
+                            {verifyingId === inv.id ? 'Проверка...' : 'Проверить оплату'}
                           </button>
                         )}
                       </td>
