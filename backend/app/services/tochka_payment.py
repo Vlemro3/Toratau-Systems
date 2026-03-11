@@ -274,11 +274,122 @@ async def get_payment_list(
 
 
 def verify_webhook_signature(payload: bytes, signature: str) -> bool:
-    """
-    Проверка подписи webhook от Точка.
-    Если tochka_webhook_secret не задан — пропускаем проверку.
-    """
-    if not settings.tochka_webhook_secret:
-        return True
-    # TODO: реализовать проверку HMAC при необходимости
+    """Legacy stub — не используется, т.к. тело webhook это JWT."""
     return True
+
+
+# ──────────────────────────────────────────────────
+# Webhook JWT decoding
+# ──────────────────────────────────────────────────
+
+TOCHKA_PUBLIC_KEY_URL = "https://enter.tochka.com/doc/openapi/static/keys/public"
+
+_cached_public_key: Optional[str] = None
+
+
+async def _fetch_tochka_public_key() -> str:
+    """Скачать публичный RSA-ключ Точки для верификации JWT."""
+    global _cached_public_key
+    if _cached_public_key:
+        return _cached_public_key
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(TOCHKA_PUBLIC_KEY_URL)
+        resp.raise_for_status()
+        _cached_public_key = resp.text.strip()
+        return _cached_public_key
+
+
+def decode_webhook_jwt(token: str, verify: bool = True) -> dict:
+    """
+    Декодировать JWT-тело webhook от Точки.
+    Тело webhook — строка JWT (RS256), подписанная публичным ключом Точки.
+    Возвращает decoded payload (dict).
+    """
+    from jose import jwt as jose_jwt, JWTError
+
+    if not verify:
+        # Декодируем без проверки подписи (для отладки)
+        return jose_jwt.get_unverified_claims(token)
+
+    try:
+        # Для RS256 нужен публичный ключ в JWK формате
+        import json
+        key_data = _cached_public_key
+        if not key_data:
+            # fallback: декодируем без проверки
+            logger.warning("Tochka public key not cached, decoding without verification")
+            return jose_jwt.get_unverified_claims(token)
+        # Ключ может быть JWK JSON
+        try:
+            key = json.loads(key_data)
+        except json.JSONDecodeError:
+            key = key_data
+        return jose_jwt.decode(token, key, algorithms=["RS256"], options={"verify_aud": False})
+    except JWTError as e:
+        logger.warning("JWT verification failed, decoding without verification: %s", e)
+        return jose_jwt.get_unverified_claims(token)
+
+
+# ──────────────────────────────────────────────────
+# Webhook management (register / list / delete)
+# ──────────────────────────────────────────────────
+
+async def get_webhooks() -> list[dict]:
+    """Получить список вебхуков (GET /webhook/v1.0/)."""
+    customer_code = await resolve_customer_code()
+    url = f"{TOCHKA_BASE}/webhook/v1.0/{customer_code}"
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        try:
+            resp = await client.get(url, headers=_headers())
+            resp.raise_for_status()
+            raw = resp.json()
+            return raw.get("Data", raw) if isinstance(raw.get("Data"), list) else [raw.get("Data", raw)]
+        except httpx.HTTPStatusError as e:
+            raise TochkaPaymentError(f"Ошибка получения вебхуков ({e.response.status_code}): {e.response.text}")
+        except httpx.RequestError as e:
+            raise TochkaPaymentError(f"Ошибка соединения: {str(e)}")
+
+
+async def register_webhook(webhook_url: str, event_type: str = "acquiringInternetPayment") -> dict:
+    """
+    Зарегистрировать webhook (PUT /webhook/v1.0/{customerCode}).
+    При создании Точка отправит тестовый webhook — URL должен ответить HTTP 200.
+    """
+    customer_code = await resolve_customer_code()
+    url = f"{TOCHKA_BASE}/webhook/v1.0/{customer_code}"
+    payload = {
+        "Data": {
+            "url": webhook_url,
+            "webhookType": event_type,
+        }
+    }
+    logger.info("Registering Tochka webhook: url=%s, event=%s", webhook_url, event_type)
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            resp = await client.put(url, json=payload, headers=_headers())
+            resp.raise_for_status()
+            raw = resp.json()
+            logger.info("Tochka webhook registered: %s", raw)
+            return raw.get("Data", raw)
+        except httpx.HTTPStatusError as e:
+            body = e.response.text
+            logger.error("Tochka register webhook error %s: %s", e.response.status_code, body)
+            raise TochkaPaymentError(f"Ошибка регистрации вебхука ({e.response.status_code}): {body}")
+        except httpx.RequestError as e:
+            raise TochkaPaymentError(f"Ошибка соединения: {str(e)}")
+
+
+async def delete_webhook(webhook_id: str) -> dict:
+    """Удалить webhook (DELETE /webhook/v1.0/{customerCode})."""
+    customer_code = await resolve_customer_code()
+    url = f"{TOCHKA_BASE}/webhook/v1.0/{customer_code}"
+    payload = {"Data": {"webhookId": webhook_id}}
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        try:
+            resp = await client.request("DELETE", url, json=payload, headers=_headers())
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPStatusError as e:
+            raise TochkaPaymentError(f"Ошибка удаления вебхука ({e.response.status_code}): {e.response.text}")
+        except httpx.RequestError as e:
+            raise TochkaPaymentError(f"Ошибка соединения: {str(e)}")

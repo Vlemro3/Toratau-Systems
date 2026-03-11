@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     tochka_customer_code: str = ""
     tochka_merchant_id: str = ""
     tochka_webhook_secret: str = ""
+    tochka_webhook_url: str = "https://программадлястроителей.рф/api/tochka/webhook"
     tochka_redirect_url: str = "https://программадлястроителей.рф/billing?payment=success"
     tochka_fail_redirect_url: str = "https://программадлястроителей.рф/billing?payment=fail"
 

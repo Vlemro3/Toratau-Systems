@@ -42,8 +42,9 @@ services:
       TOCHKA_CUSTOMER_CODE: ${TOCHKA_CUSTOMER_CODE:-}
       TOCHKA_MERCHANT_ID: ${TOCHKA_MERCHANT_ID:-}
       TOCHKA_WEBHOOK_SECRET: ${TOCHKA_WEBHOOK_SECRET:-}
-      TOCHKA_REDIRECT_URL: ${TOCHKA_REDIRECT_URL:-https://app.example.com/billing?payment=success}
-      TOCHKA_FAIL_REDIRECT_URL: ${TOCHKA_FAIL_REDIRECT_URL:-https://app.example.com/billing?payment=fail}
+      TOCHKA_WEBHOOK_URL: ${TOCHKA_WEBHOOK_URL:-https://программадлястроителей.рф/api/tochka/webhook}
+      TOCHKA_REDIRECT_URL: ${TOCHKA_REDIRECT_URL:-https://программадлястроителей.рф/billing?payment=success}
+      TOCHKA_FAIL_REDIRECT_URL: ${TOCHKA_FAIL_REDIRECT_URL:-https://программадлястроителей.рф/billing?payment=fail}
 
   # --- Frontend (React + Nginx) ---
   frontend:

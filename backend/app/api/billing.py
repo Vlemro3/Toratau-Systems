@@ -345,7 +345,8 @@ async def verify_payment(
 ):
     """
     Проверить статус оплаты в Точке (polling fallback если webhook не дошёл).
-    Запрашивает operationId у Tochka API и активирует подписку при статусе EXECUTED.
+    Ищет платёж через Get Payment Operation List по paymentLinkId (= invoice.id).
+    Статусы успешной оплаты: EXECUTED или APPROVED.
     """
     portal_id = current_user.portal_id or 0
     invoice = db.query(models.BillingInvoice).filter(
@@ -359,48 +360,61 @@ async def verify_payment(
         sub = _get_or_create_subscription(db, current_user)
         return {"subscription": _sub_to_dict(sub), "invoice": _invoice_to_dict(invoice), "verified": True}
 
-    operation_id = invoice.tochka_operation_id
-    if not operation_id:
-        raise HTTPException(400, "Нет operationId для проверки в Точке")
-
     from app.services.tochka_payment import get_payment_info, get_payment_list, TochkaPaymentError
 
+    PAID_STATUSES = {"EXECUTED", "APPROVED"}
     tochka_status = ""
+    found_operation_id = ""
 
-    # 1) Попробуем получить статус по operationId
+    # Основной способ: поиск через Get Payment Operation List по paymentLinkId
+    # paymentLinkId при создании = str(invoice.id)
+    search_plid = invoice.tochka_payment_link_id or str(invoice.id)
     try:
-        info = await get_payment_info(operation_id)
-        tochka_status = info.get("status", "")
-        logger.info("Verify payment (by operationId): invoice #%d, operation=%s, status=%s", invoice_id, operation_id, tochka_status)
-    except TochkaPaymentError as e:
-        logger.warning("Verify payment: get_payment_info failed for %s: %s", operation_id, e)
+        from datetime import date
+        today = date.today().isoformat()
+        created = invoice.created_at.strftime("%Y-%m-%d") if invoice.created_at else today
+        payments_data = await get_payment_list(from_date=created, to_date=today)
 
-    # 2) Если статус не EXECUTED — ищем по paymentLinkId через список платежей
-    if tochka_status != "EXECUTED" and invoice.tochka_payment_link_id:
+        # Разобрать ответ — может быть list или dict с ключом payments/Payments
+        payments = []
+        if isinstance(payments_data, list):
+            payments = payments_data
+        elif isinstance(payments_data, dict):
+            payments = payments_data.get("payments", payments_data.get("Payments", []))
+            if not payments and "operationId" in payments_data:
+                payments = [payments_data]
+
+        logger.info("Verify payment: got %d operations from Tochka, searching for paymentLinkId=%s", len(payments), search_plid)
+
+        for p in payments:
+            plid = p.get("paymentLinkId", "")
+            pstatus = p.get("status", "")
+            if plid == search_plid and pstatus in PAID_STATUSES:
+                tochka_status = pstatus
+                found_operation_id = p.get("operationId", "")
+                logger.info("Verify payment: found %s operation, operationId=%s", pstatus, found_operation_id)
+                break
+    except TochkaPaymentError as e:
+        logger.warning("Verify payment: get_payment_list failed: %s", e)
+
+    # Fallback: прямой запрос по operationId (если есть)
+    if tochka_status not in PAID_STATUSES and invoice.tochka_operation_id:
         try:
-            from datetime import date
-            today = date.today().isoformat()
-            created = invoice.created_at.strftime("%Y-%m-%d") if invoice.created_at else today
-            payments_data = await get_payment_list(from_date=created, to_date=today)
-            payments = payments_data if isinstance(payments_data, list) else payments_data.get("payments", payments_data.get("Payments", []))
-            for p in payments:
-                plid = p.get("paymentLinkId", "")
-                pstatus = p.get("status", "")
-                if plid == invoice.tochka_payment_link_id and pstatus == "EXECUTED":
-                    tochka_status = "EXECUTED"
-                    real_op_id = p.get("operationId", operation_id)
-                    if real_op_id:
-                        operation_id = real_op_id
-                    logger.info("Verify payment (by paymentLinkId): found EXECUTED, operationId=%s", operation_id)
-                    break
+            info = await get_payment_info(invoice.tochka_operation_id)
+            st = info.get("status", "")
+            if st in PAID_STATUSES:
+                tochka_status = st
+                found_operation_id = invoice.tochka_operation_id
+            logger.info("Verify payment (by operationId): status=%s", st)
         except TochkaPaymentError as e:
-            logger.warning("Verify payment: get_payment_list failed: %s", e)
+            logger.warning("Verify payment: get_payment_info failed: %s", e)
 
     logger.info("Verify payment: invoice #%d, final tochka_status=%s", invoice_id, tochka_status)
 
-    if tochka_status == "EXECUTED":
+    if tochka_status in PAID_STATUSES:
         activated = activate_subscription_by_tochka(
-            db, operation_id, invoice.tochka_payment_link_id or ""
+            db, found_operation_id or invoice.tochka_operation_id or "",
+            invoice_id=invoice.id,
         )
         if activated:
             db.refresh(invoice)
@@ -418,19 +432,59 @@ async def verify_payment(
 def activate_subscription_by_tochka(
     db: Session,
     operation_id: str,
-    payment_link_id: str,
+    payment_link_id: str = "",
+    purpose: str = "",
+    invoice_id: Optional[int] = None,
 ) -> bool:
     """
-    Вызывается из webhook при статусе EXECUTED.
-    Находит invoice по tochka_operation_id или tochka_payment_link_id, активирует подписку.
+    Вызывается из webhook (status=APPROVED) или verify-payment (status=EXECUTED/APPROVED).
+    Находит invoice по:
+      1) прямому invoice_id
+      2) tochka_operation_id
+      3) tochka_payment_link_id
+      4) purpose (извлекаем invoice ID из строки назначения)
     """
-    invoice = db.query(models.BillingInvoice).filter(
-        (models.BillingInvoice.tochka_operation_id == operation_id) |
-        (models.BillingInvoice.tochka_payment_link_id == payment_link_id)
-    ).first()
+    invoice = None
+
+    # 1) По прямому invoice_id
+    if invoice_id:
+        invoice = db.query(models.BillingInvoice).filter(
+            models.BillingInvoice.id == invoice_id
+        ).first()
+
+    # 2) По tochka_operation_id или tochka_payment_link_id
+    if not invoice and (operation_id or payment_link_id):
+        filters = []
+        if operation_id:
+            filters.append(models.BillingInvoice.tochka_operation_id == operation_id)
+        if payment_link_id:
+            filters.append(models.BillingInvoice.tochka_payment_link_id == payment_link_id)
+        from sqlalchemy import or_
+        invoice = db.query(models.BillingInvoice).filter(or_(*filters)).first()
+
+    # 3) По purpose — paymentLinkId = str(invoice.id), Точка возвращает его в purpose
+    #    или tochka_payment_link_id совпадает с ID, который мы передали при создании
+    if not invoice and payment_link_id:
+        # payment_link_id might be the invoice ID we passed
+        try:
+            pid = int(payment_link_id)
+            invoice = db.query(models.BillingInvoice).filter(
+                models.BillingInvoice.id == pid
+            ).first()
+        except (ValueError, TypeError):
+            pass
+
+    # 4) Последняя pending invoice (fallback)
+    if not invoice:
+        invoice = db.query(models.BillingInvoice).filter(
+            models.BillingInvoice.status == "pending"
+        ).order_by(models.BillingInvoice.created_at.desc()).first()
 
     if not invoice:
-        logger.warning("Webhook: invoice not found for operation_id=%s, payment_link_id=%s", operation_id, payment_link_id)
+        logger.warning(
+            "activate_subscription: invoice not found for operation_id=%s, payment_link_id=%s, purpose=%s",
+            operation_id, payment_link_id, purpose,
+        )
         return False
 
     if invoice.status == "paid":

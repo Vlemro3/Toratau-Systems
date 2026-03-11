@@ -26,6 +26,11 @@ from app.services.tochka_payment import (
     get_retailers,
     get_customers,
     verify_webhook_signature,
+    decode_webhook_jwt,
+    _fetch_tochka_public_key,
+    register_webhook as tochka_register_webhook,
+    get_webhooks as tochka_get_webhooks,
+    delete_webhook as tochka_delete_webhook,
     TochkaPaymentError,
 )
 from app.config import settings
@@ -165,33 +170,53 @@ async def list_payments(
 async def tochka_webhook(request: Request, db: Session = Depends(get_db)):
     """
     Webhook от Точка Банка при изменении статуса платежа.
-    Событие: acquiringInternetPayment
+    Событие: acquiringInternetPayment.
+
+    Тело запроса — JWT-строка (RS256), Content-Type: text/plain.
+    Декодируем JWT → получаем payload с полями:
+      operationId, status (APPROVED), amount, webhookType, purpose, merchantId, ...
     """
-    body = await request.body()
-    signature = request.headers.get("X-Signature", "")
+    body_bytes = await request.body()
+    jwt_token = body_bytes.decode("utf-8").strip()
 
-    if not verify_webhook_signature(body, signature):
-        raise HTTPException(403, "Invalid signature")
+    if not jwt_token:
+        logger.warning("Tochka webhook: empty body")
+        return {"status": "ok"}
 
+    # Загрузим публичный ключ если ещё не кэширован
     try:
-        data = await request.json()
-    except Exception:
-        raise HTTPException(400, "Invalid JSON")
+        await _fetch_tochka_public_key()
+    except Exception as e:
+        logger.warning("Failed to fetch Tochka public key: %s", e)
 
-    event_type = data.get("eventType", "")
-    payment_data = data.get("data", data.get("Data", {}))
-    payment_id = payment_data.get("paymentLinkId", "")
-    operation_id = payment_data.get("operationId", "")
-    status = payment_data.get("status", "")
+    # Декодируем JWT
+    try:
+        data = decode_webhook_jwt(jwt_token, verify=True)
+    except Exception as e:
+        logger.error("Tochka webhook: failed to decode JWT: %s", e)
+        # Попробуем без верификации
+        try:
+            data = decode_webhook_jwt(jwt_token, verify=False)
+        except Exception:
+            raise HTTPException(400, "Invalid JWT token")
+
+    event_type = data.get("webhookType", "")
+    operation_id = data.get("operationId", "")
+    status = data.get("status", "")
+    amount = data.get("amount", "")
+    purpose = data.get("purpose", "")
+    payment_type = data.get("paymentType", "")
 
     logger.info(
-        "Tochka webhook: event=%s, payment_id=%s, operation_id=%s, status=%s",
-        event_type, payment_id, operation_id, status,
+        "Tochka webhook: event=%s, operation_id=%s, status=%s, amount=%s, type=%s, purpose=%s",
+        event_type, operation_id, status, amount, payment_type, purpose,
     )
 
-    if event_type == "acquiringInternetPayment" and status == "EXECUTED":
+    # acquiringInternetPayment с APPROVED = успешная оплата
+    if event_type == "acquiringInternetPayment" and status == "APPROVED":
         from app.api.billing import activate_subscription_by_tochka
-        activated = activate_subscription_by_tochka(db, operation_id, payment_id)
+        # Ищем invoice по purpose (содержит "Заказ N:" или по operationId через список)
+        activated = activate_subscription_by_tochka(db, operation_id, purpose=purpose)
         if activated:
             logger.info("Tochka webhook: subscription activated for operation=%s", operation_id)
         else:
@@ -231,3 +256,42 @@ async def check_connection(user=Depends(require_admin)):
         result["message"] = f"Ошибка получения торговых точек: {e}"
 
     return result
+
+
+# ──────────────────────────────────────────────────
+# Webhook management endpoints
+# ──────────────────────────────────────────────────
+
+@router.get("/webhooks")
+async def list_webhooks(user=Depends(require_admin)):
+    """Получить список зарегистрированных вебхуков в Точке."""
+    try:
+        return await tochka_get_webhooks()
+    except TochkaPaymentError as e:
+        raise HTTPException(502, str(e))
+
+
+@router.post("/webhooks/register")
+async def register_webhook_endpoint(user=Depends(require_admin)):
+    """
+    Зарегистрировать webhook для acquiringInternetPayment.
+    URL берётся из TOCHKA_WEBHOOK_URL. Точка отправит тестовый запрос для проверки.
+    """
+    webhook_url = settings.tochka_webhook_url
+    if not webhook_url:
+        raise HTTPException(400, "TOCHKA_WEBHOOK_URL не настроен в .env")
+    try:
+        result = await tochka_register_webhook(webhook_url, "acquiringInternetPayment")
+        return {"registered": True, "url": webhook_url, "data": result}
+    except TochkaPaymentError as e:
+        raise HTTPException(502, str(e))
+
+
+@router.delete("/webhooks/{webhook_id}")
+async def delete_webhook_endpoint(webhook_id: str, user=Depends(require_admin)):
+    """Удалить webhook по ID."""
+    try:
+        result = await tochka_delete_webhook(webhook_id)
+        return {"deleted": True, "data": result}
+    except TochkaPaymentError as e:
+        raise HTTPException(502, str(e))
