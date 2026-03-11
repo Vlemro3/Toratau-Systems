@@ -232,24 +232,36 @@ async def get_payment_info(operation_id: str) -> dict:
 
     Точка возвращает: {"Operation": [{...}]}  — массив из одного элемента.
     """
+    customer_code = await resolve_customer_code()
     url = f"{TOCHKA_BASE}/acquiring/v1.0/payments/{operation_id}"
+    params = {"customerCode": customer_code}
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         try:
-            resp = await client.get(url, headers=_headers())
+            resp = await client.get(url, params=params, headers=_headers())
             resp.raise_for_status()
             raw = resp.json()
-            logger.info("Tochka get_payment_info raw keys: %s", list(raw.keys()) if isinstance(raw, dict) else type(raw).__name__)
+            logger.warning("Tochka get_payment_info raw keys: %s, status_code=%d",
+                           list(raw.keys()) if isinstance(raw, dict) else type(raw).__name__,
+                           resp.status_code)
 
             # Точка оборачивает ответ в {"Operation": [...]}
             operations = raw.get("Operation", raw.get("Data", []))
             if isinstance(operations, list) and operations:
-                return operations[0]
+                result = operations[0]
+                logger.warning("Tochka get_payment_info parsed: status=%s, operationId=%s",
+                               result.get("status", "?"), result.get("operationId", "?"))
+                return result
             if isinstance(operations, dict):
                 return operations
+            # Fallback: если ответ сам содержит operationId
+            if isinstance(raw, dict) and "operationId" in raw:
+                return raw
+            logger.warning("Tochka get_payment_info: unexpected format, returning raw: %s", str(raw)[:500])
             return raw
         except httpx.HTTPStatusError as e:
             body = e.response.text
+            logger.warning("Tochka get_payment_info HTTP error %d: %s", e.response.status_code, body[:300])
             raise TochkaPaymentError(f"Ошибка получения операции ({e.response.status_code}): {body}")
         except httpx.RequestError as e:
             raise TochkaPaymentError(f"Ошибка соединения: {str(e)}")
@@ -272,14 +284,14 @@ async def get_payment_list(
     if to_date:
         params["toDate"] = to_date
 
-    logger.info("Tochka get_payment_list: params=%s", params)
+    logger.warning("Tochka get_payment_list: params=%s", params)
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         try:
             resp = await client.get(url, params=params, headers=_headers())
             resp.raise_for_status()
             raw = resp.json()
-            logger.info("Tochka get_payment_list raw response keys: %s", list(raw.keys()) if isinstance(raw, dict) else type(raw).__name__)
+            logger.warning("Tochka get_payment_list raw response keys: %s", list(raw.keys()) if isinstance(raw, dict) else type(raw).__name__)
 
             # Точка может оборачивать в "Operation", "Data", или вернуть list
             result = []
@@ -298,9 +310,9 @@ async def get_payment_list(
                 if not result and "operationId" in raw:
                     result = [raw]
 
-            logger.info("Tochka get_payment_list: found %d operations", len(result))
+            logger.warning("Tochka get_payment_list: found %d operations", len(result))
             if result:
-                logger.info("Tochka get_payment_list: first operation keys: %s", list(result[0].keys()) if isinstance(result[0], dict) else type(result[0]).__name__)
+                logger.warning("Tochka get_payment_list: first operation keys: %s", list(result[0].keys()) if isinstance(result[0], dict) else type(result[0]).__name__)
             return result
         except httpx.HTTPStatusError as e:
             body = e.response.text
@@ -390,23 +402,24 @@ async def register_webhook(webhook_url: str, event_type: str = "acquiringInterne
     """
     Зарегистрировать webhook (PUT /webhook/v1.0/{customerCode}).
     При создании Точка отправит тестовый webhook — URL должен ответить HTTP 200.
+    Формат: {"url": "...", "webhooks_list": [{"webhookType": "..."}]}
     """
     customer_code = await resolve_customer_code()
     url = f"{TOCHKA_BASE}/webhook/v1.0/{customer_code}"
     payload = {
-        "Data": {
-            "url": webhook_url,
-            "webhookType": event_type,
-        }
+        "url": webhook_url,
+        "webhooks_list": [
+            {"webhookType": event_type}
+        ],
     }
-    logger.info("Registering Tochka webhook: url=%s, event=%s", webhook_url, event_type)
+    logger.warning("Registering Tochka webhook: url=%s, event=%s", webhook_url, event_type)
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             resp = await client.put(url, json=payload, headers=_headers())
             resp.raise_for_status()
             raw = resp.json()
-            logger.info("Tochka webhook registered: %s", raw)
-            return raw.get("Data", raw)
+            logger.warning("Tochka webhook registered: %s", raw)
+            return raw
         except httpx.HTTPStatusError as e:
             body = e.response.text
             logger.error("Tochka register webhook error %s: %s", e.response.status_code, body)

@@ -200,19 +200,24 @@ async def debug_verify(
         "payment_list_error": None,
     }
 
-    # 1) Прямой запрос по operationId — показываем сырой ответ от Точки
+    # 1) Прямой запрос по operationId — показываем сырой ответ + парсер
     if invoice.tochka_operation_id:
         try:
             import httpx
-            from app.services.tochka_payment import _headers, TOCHKA_BASE
+            from app.services.tochka_payment import _headers, TOCHKA_BASE, resolve_customer_code
+            customer_code = await resolve_customer_code()
             url = f"{TOCHKA_BASE}/acquiring/v1.0/payments/{invoice.tochka_operation_id}"
             async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.get(url, headers=_headers())
-                raw = resp.json()
-                result["raw_tochka_response"] = raw
+                resp = await client.get(url, params={"customerCode": customer_code}, headers=_headers())
                 result["raw_tochka_status_code"] = resp.status_code
+                try:
+                    result["raw_tochka_response"] = resp.json()
+                except Exception:
+                    result["raw_tochka_response"] = resp.text[:1000]
+        except Exception as e:
+            result["raw_tochka_error"] = str(e)
 
-            # Также покажем результат нашего парсера
+        try:
             info = await get_payment_info(invoice.tochka_operation_id)
             result["payment_info"] = info
         except Exception as e:

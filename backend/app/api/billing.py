@@ -348,17 +348,26 @@ async def verify_payment(
     Ищет платёж через Get Payment Operation List по paymentLinkId (= invoice.id).
     Статусы успешной оплаты: EXECUTED или APPROVED.
     """
-    portal_id = current_user.portal_id or 0
-    invoice = db.query(models.BillingInvoice).filter(
-        models.BillingInvoice.id == invoice_id,
-        models.BillingInvoice.portal_id == portal_id,
-    ).first()
+    # superAdmin может проверить любой счёт, admin — только своего портала
+    query = db.query(models.BillingInvoice).filter(models.BillingInvoice.id == invoice_id)
+    if current_user.role != "superAdmin":
+        portal_id = current_user.portal_id or 0
+        query = query.filter(models.BillingInvoice.portal_id == portal_id)
+    invoice = query.first()
     if not invoice:
         raise HTTPException(404, "Счёт не найден")
 
+    # Получаем подписку по invoice, а не по current_user (superadmin не имеет portal_id)
+    def _get_sub_for_invoice():
+        sub = db.query(models.Subscription).filter(
+            models.Subscription.id == invoice.subscription_id
+        ).first()
+        if sub:
+            return sub
+        return _get_or_create_subscription(db, current_user)
+
     if invoice.status == "paid":
-        sub = _get_or_create_subscription(db, current_user)
-        return {"subscription": _sub_to_dict(sub), "invoice": _invoice_to_dict(invoice), "verified": True}
+        return {"subscription": _sub_to_dict(_get_sub_for_invoice()), "invoice": _invoice_to_dict(invoice), "verified": True}
 
     from app.services.tochka_payment import get_payment_info, get_payment_list, TochkaPaymentError
 
@@ -371,7 +380,8 @@ async def verify_payment(
         try:
             info = await get_payment_info(invoice.tochka_operation_id)
             st = info.get("status", "")
-            logger.info("Verify payment (by operationId=%s): status=%s", invoice.tochka_operation_id, st)
+            logger.warning("Verify payment (by operationId=%s): status=%s, all_keys=%s",
+                           invoice.tochka_operation_id, st, list(info.keys()) if isinstance(info, dict) else "?")
             if st in PAID_STATUSES:
                 tochka_status = st
                 found_operation_id = invoice.tochka_operation_id
@@ -387,7 +397,7 @@ async def verify_payment(
             created = invoice.created_at.strftime("%Y-%m-%d") if invoice.created_at else today
             payments = await get_payment_list(from_date=created, to_date=today)
 
-            logger.info("Verify payment: got %d operations, searching for paymentLinkId=%s", len(payments), search_plid)
+            logger.warning("Verify payment: got %d operations, searching for paymentLinkId=%s", len(payments), search_plid)
 
             for p in payments:
                 plid = p.get("paymentLinkId", "")
@@ -395,12 +405,12 @@ async def verify_payment(
                 if plid == search_plid and pstatus in PAID_STATUSES:
                     tochka_status = pstatus
                     found_operation_id = p.get("operationId", "")
-                    logger.info("Verify payment: MATCH found — %s, operationId=%s", pstatus, found_operation_id)
+                    logger.warning("Verify payment: MATCH found — %s, operationId=%s", pstatus, found_operation_id)
                     break
         except TochkaPaymentError as e:
             logger.warning("Verify payment: get_payment_list failed: %s", e)
 
-    logger.info("Verify payment: invoice #%d, final tochka_status=%s", invoice_id, tochka_status)
+    logger.warning("Verify payment: invoice #%d, final tochka_status=%s", invoice_id, tochka_status)
 
     if tochka_status in PAID_STATUSES:
         activated = activate_subscription_by_tochka(
@@ -409,11 +419,10 @@ async def verify_payment(
         )
         if activated:
             db.refresh(invoice)
-            sub = _get_or_create_subscription(db, current_user)
-            return {"subscription": _sub_to_dict(sub), "invoice": _invoice_to_dict(invoice), "verified": True}
+            return {"subscription": _sub_to_dict(_get_sub_for_invoice()), "invoice": _invoice_to_dict(invoice), "verified": True}
 
     return {
-        "subscription": _sub_to_dict(_get_or_create_subscription(db, current_user)),
+        "subscription": _sub_to_dict(_get_sub_for_invoice()),
         "invoice": _invoice_to_dict(invoice),
         "verified": False,
         "tochkaStatus": tochka_status,
