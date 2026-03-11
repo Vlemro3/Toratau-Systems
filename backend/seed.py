@@ -113,6 +113,8 @@ def seed():
                 is_active=True,
                 portal_id=None,
             ))
+        else:
+            superadmin_user.hashed_password = get_password_hash(settings.superadmin_password)
 
         db.commit()
         print("Seed completed: demo portal (owner/admin/foreman), superadmin.")

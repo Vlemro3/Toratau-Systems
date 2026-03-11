@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
     default_portal_slug: str = "demo"
     superadmin_login: str = "superadmin"
-    superadmin_password: str = "superadmin123"
+    superadmin_password: str = "Arbuz919149"
     openai_api_key: str = ""
     openai_estimate_model: str = "gpt-4.1"
     anthropic_api_key: str = ""
