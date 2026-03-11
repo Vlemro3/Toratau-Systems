@@ -45,11 +45,11 @@ import { SuperAdminDashboard } from './modules/super-admin/pages/SuperAdminDashb
 import { PortalsListPage } from './modules/super-admin/pages/PortalsListPage';
 import { PortalDetailsPage } from './modules/super-admin/pages/PortalDetailsPage';
 
-/** Если пользователь авторизован — редирект на дашборд, иначе — лендинг */
+/** Если пользователь авторизован — редирект на дашборд (или super-admin), иначе — лендинг */
 function LandingOrDashboard() {
   const { user, loading } = useAuth();
   if (loading) return null;
-  if (user) return <Navigate to="/dashboard" replace />;
+  if (user) return <Navigate to={user.role === 'superAdmin' ? '/super-admin' : '/dashboard'} replace />;
   return <Landing />;
 }
 

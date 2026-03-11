@@ -10,7 +10,7 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   loading: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<User>;
   register: (data: RegisterRequest) => Promise<void>;
   logout: () => void;
   setUser: (u: User) => void;
@@ -23,7 +23,7 @@ export const AuthContext = createContext<AuthContextType>({
   user: null,
   token: null,
   loading: true,
-  login: async () => {},
+  login: async () => ({} as User),
   register: async () => {},
   logout: () => {},
   setUser: () => {},
@@ -54,12 +54,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, [token]);
 
-  const login = useCallback(async (username: string, password: string) => {
+  const login = useCallback(async (username: string, password: string): Promise<User> => {
     const resp = await authApi.login(username, password);
     localStorage.setItem('token', resp.access_token);
     localStorage.setItem('user', JSON.stringify(resp.user));
     setToken(resp.access_token);
     setUser(resp.user);
+    return resp.user;
   }, []);
 
   const register = useCallback(async (data: RegisterRequest) => {

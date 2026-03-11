@@ -33,7 +33,7 @@ const PROJECT_ITEMS_FOREMAN = [
 ];
 
 export function Sidebar({ open, onClose }: Props) {
-  const { isAdmin, isForeman } = useAuth();
+  const { isAdmin, isForeman, isSuperAdmin } = useAuth();
   const projectItems = isForeman ? PROJECT_ITEMS_FOREMAN : PROJECT_ITEMS_ADMIN;
   const location = useLocation();
 
@@ -117,6 +117,21 @@ export function Sidebar({ open, onClose }: Props) {
               <span className="sidebar__icon">📄</span>
               <span className="sidebar__text">Шаблоны документов</span>
             </NavLink>
+          )}
+
+          {isSuperAdmin && (
+            <>
+              <div className="sidebar__divider" />
+              <div className="sidebar__section-title">Администрирование</div>
+              <NavLink to="/super-admin" end className={linkClass} onClick={onClose}>
+                <span className="sidebar__icon">🛡️</span>
+                <span className="sidebar__text">Панель управления</span>
+              </NavLink>
+              <NavLink to="/super-admin/portals" className={linkClass} onClick={onClose}>
+                <span className="sidebar__icon">🏗️</span>
+                <span className="sidebar__text">Порталы</span>
+              </NavLink>
+            </>
           )}
         </nav>
 

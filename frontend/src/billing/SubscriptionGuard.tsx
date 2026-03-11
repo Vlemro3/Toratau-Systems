@@ -7,6 +7,7 @@
  */
 import { useSubscription } from './SubscriptionContext';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 import { BILLING_CONFIG, formatPrice } from './billingConfig';
 import type { PlanTier } from './billingTypes';
 
@@ -21,9 +22,11 @@ function formatObjectLimit(limit: number | null): string {
 
 export function SubscriptionGuard({ children }: { children: React.ReactNode }) {
   const { subscription, accessAllowed, loading } = useSubscription();
+  const { isSuperAdmin } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
+  if (isSuperAdmin) return <>{children}</>;
   if (loading || !subscription) return <>{children}</>;
 
   const isAllowedPath = ALLOWED_PATHS.some((p) => location.pathname.startsWith(p));

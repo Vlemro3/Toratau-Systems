@@ -21,8 +21,8 @@ export function LoginPage() {
     setLoading(true);
 
     try {
-      await login(username, password);
-      navigate('/dashboard');
+      const user = await login(username, password);
+      navigate(user.role === 'superAdmin' ? '/super-admin' : '/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Некорректный логин или пароль');
     } finally {
