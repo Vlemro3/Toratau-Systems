@@ -351,7 +351,7 @@ export function BillingPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {invoices.map((inv) => (
+                  {[...invoices].reverse().map((inv) => (
                     <tr key={inv.id}>
                       <td>#{inv.id}</td>
                       <td>{new Date(inv.createdAt).toLocaleDateString('ru-RU')}</td>
