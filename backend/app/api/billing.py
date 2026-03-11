@@ -366,40 +366,39 @@ async def verify_payment(
     tochka_status = ""
     found_operation_id = ""
 
-    # Основной способ: поиск через Get Payment Operation List по paymentLinkId
-    # paymentLinkId при создании = str(invoice.id)
-    search_plid = invoice.tochka_payment_link_id or str(invoice.id)
-    try:
-        from datetime import date
-        today = date.today().isoformat()
-        created = invoice.created_at.strftime("%Y-%m-%d") if invoice.created_at else today
-        payments = await get_payment_list(from_date=created, to_date=today)
-
-        logger.info("Verify payment: got %d operations from Tochka, searching for paymentLinkId=%s", len(payments), search_plid)
-
-        for p in payments:
-            plid = p.get("paymentLinkId", "")
-            pstatus = p.get("status", "")
-            logger.info("  operation: paymentLinkId=%s, status=%s, operationId=%s", plid, pstatus, p.get("operationId", ""))
-            if plid == search_plid and pstatus in PAID_STATUSES:
-                tochka_status = pstatus
-                found_operation_id = p.get("operationId", "")
-                logger.info("Verify payment: MATCH found — %s, operationId=%s", pstatus, found_operation_id)
-                break
-    except TochkaPaymentError as e:
-        logger.warning("Verify payment: get_payment_list failed: %s", e)
-
-    # Fallback: прямой запрос по operationId (если есть)
-    if tochka_status not in PAID_STATUSES and invoice.tochka_operation_id:
+    # Основной способ: прямой запрос по operationId (самый надёжный)
+    if invoice.tochka_operation_id:
         try:
             info = await get_payment_info(invoice.tochka_operation_id)
             st = info.get("status", "")
+            logger.info("Verify payment (by operationId=%s): status=%s", invoice.tochka_operation_id, st)
             if st in PAID_STATUSES:
                 tochka_status = st
                 found_operation_id = invoice.tochka_operation_id
-            logger.info("Verify payment (by operationId): status=%s", st)
         except TochkaPaymentError as e:
             logger.warning("Verify payment: get_payment_info failed: %s", e)
+
+    # Fallback: поиск через Get Payment Operation List по paymentLinkId
+    if tochka_status not in PAID_STATUSES:
+        search_plid = invoice.tochka_payment_link_id or str(invoice.id)
+        try:
+            from datetime import date
+            today = date.today().isoformat()
+            created = invoice.created_at.strftime("%Y-%m-%d") if invoice.created_at else today
+            payments = await get_payment_list(from_date=created, to_date=today)
+
+            logger.info("Verify payment: got %d operations, searching for paymentLinkId=%s", len(payments), search_plid)
+
+            for p in payments:
+                plid = p.get("paymentLinkId", "")
+                pstatus = p.get("status", "")
+                if plid == search_plid and pstatus in PAID_STATUSES:
+                    tochka_status = pstatus
+                    found_operation_id = p.get("operationId", "")
+                    logger.info("Verify payment: MATCH found — %s, operationId=%s", pstatus, found_operation_id)
+                    break
+        except TochkaPaymentError as e:
+            logger.warning("Verify payment: get_payment_list failed: %s", e)
 
     logger.info("Verify payment: invoice #%d, final tochka_status=%s", invoice_id, tochka_status)
 

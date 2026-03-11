@@ -229,6 +229,8 @@ async def get_payment_info(operation_id: str) -> dict:
     """
     Получить информацию по одной операции (GET /acquiring/v1.0/payments/{operationId}).
     operationId можно получить из webhook или из списка операций.
+
+    Точка возвращает: {"Operation": [{...}]}  — массив из одного элемента.
     """
     url = f"{TOCHKA_BASE}/acquiring/v1.0/payments/{operation_id}"
 
@@ -237,7 +239,15 @@ async def get_payment_info(operation_id: str) -> dict:
             resp = await client.get(url, headers=_headers())
             resp.raise_for_status()
             raw = resp.json()
-            return raw.get("Data", raw)
+            logger.info("Tochka get_payment_info raw keys: %s", list(raw.keys()) if isinstance(raw, dict) else type(raw).__name__)
+
+            # Точка оборачивает ответ в {"Operation": [...]}
+            operations = raw.get("Operation", raw.get("Data", []))
+            if isinstance(operations, list) and operations:
+                return operations[0]
+            if isinstance(operations, dict):
+                return operations
+            return raw
         except httpx.HTTPStatusError as e:
             body = e.response.text
             raise TochkaPaymentError(f"Ошибка получения операции ({e.response.status_code}): {body}")
@@ -270,18 +280,23 @@ async def get_payment_list(
             resp.raise_for_status()
             raw = resp.json()
             logger.info("Tochka get_payment_list raw response keys: %s", list(raw.keys()) if isinstance(raw, dict) else type(raw).__name__)
-            data = raw.get("Data", raw) if isinstance(raw, dict) else raw
 
-            # Нормализуем в list
-            if isinstance(data, list):
-                result = data
-            elif isinstance(data, dict):
-                # Может быть {"payments": [...]} или {"Payments": [...]} или одна операция
-                result = data.get("payments", data.get("Payments", []))
-                if not result and "operationId" in data:
-                    result = [data]
-            else:
-                result = []
+            # Точка может оборачивать в "Operation", "Data", или вернуть list
+            result = []
+            if isinstance(raw, list):
+                result = raw
+            elif isinstance(raw, dict):
+                # Проверяем все возможные ключи-обёртки
+                for key in ("Operation", "Data", "payments", "Payments"):
+                    val = raw.get(key)
+                    if isinstance(val, list):
+                        result = val
+                        break
+                    elif isinstance(val, dict) and "operationId" in val:
+                        result = [val]
+                        break
+                if not result and "operationId" in raw:
+                    result = [raw]
 
             logger.info("Tochka get_payment_list: found %d operations", len(result))
             if result:
