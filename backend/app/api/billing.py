@@ -363,14 +363,40 @@ async def verify_payment(
     if not operation_id:
         raise HTTPException(400, "Нет operationId для проверки в Точке")
 
-    from app.services.tochka_payment import get_payment_info, TochkaPaymentError
+    from app.services.tochka_payment import get_payment_info, get_payment_list, TochkaPaymentError
+
+    tochka_status = ""
+
+    # 1) Попробуем получить статус по operationId
     try:
         info = await get_payment_info(operation_id)
+        tochka_status = info.get("status", "")
+        logger.info("Verify payment (by operationId): invoice #%d, operation=%s, status=%s", invoice_id, operation_id, tochka_status)
     except TochkaPaymentError as e:
-        raise HTTPException(502, f"Ошибка проверки статуса в Точке: {e}")
+        logger.warning("Verify payment: get_payment_info failed for %s: %s", operation_id, e)
 
-    tochka_status = info.get("status", "")
-    logger.info("Verify payment: invoice #%d, operation=%s, tochka_status=%s", invoice_id, operation_id, tochka_status)
+    # 2) Если статус не EXECUTED — ищем по paymentLinkId через список платежей
+    if tochka_status != "EXECUTED" and invoice.tochka_payment_link_id:
+        try:
+            from datetime import date
+            today = date.today().isoformat()
+            created = invoice.created_at.strftime("%Y-%m-%d") if invoice.created_at else today
+            payments_data = await get_payment_list(from_date=created, to_date=today)
+            payments = payments_data if isinstance(payments_data, list) else payments_data.get("payments", payments_data.get("Payments", []))
+            for p in payments:
+                plid = p.get("paymentLinkId", "")
+                pstatus = p.get("status", "")
+                if plid == invoice.tochka_payment_link_id and pstatus == "EXECUTED":
+                    tochka_status = "EXECUTED"
+                    real_op_id = p.get("operationId", operation_id)
+                    if real_op_id:
+                        operation_id = real_op_id
+                    logger.info("Verify payment (by paymentLinkId): found EXECUTED, operationId=%s", operation_id)
+                    break
+        except TochkaPaymentError as e:
+            logger.warning("Verify payment: get_payment_list failed: %s", e)
+
+    logger.info("Verify payment: invoice #%d, final tochka_status=%s", invoice_id, tochka_status)
 
     if tochka_status == "EXECUTED":
         activated = activate_subscription_by_tochka(

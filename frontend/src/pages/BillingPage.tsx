@@ -50,11 +50,31 @@ export function BillingPage() {
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState('');
   const [verifying, setVerifying] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     billingApi.getInvoices().then(setInvoices).catch(() => {});
     billingApi.getPaymentLogs().then(setLogs).catch(() => {});
   }, [subscription]);
+
+  /** Подтвердить оплату вручную (если деньги списаны, но webhook/verify не сработал) */
+  const handleManualConfirm = async (invoiceId: number) => {
+    if (!window.confirm('Вы уверены, что оплата по этому счёту прошла? Подписка будет активирована.')) return;
+    setConfirming(true);
+    setPaymentError('');
+    try {
+      await billingApi.simulatePaymentSuccess(invoiceId);
+      setPaymentSuccess(true);
+      setTimeout(() => setPaymentSuccess(false), 8000);
+      await refresh();
+      billingApi.getInvoices().then(setInvoices).catch(() => {});
+      billingApi.getPaymentLogs().then(setLogs).catch(() => {});
+    } catch (e) {
+      setPaymentError(e instanceof Error ? e.message : 'Ошибка подтверждения оплаты');
+    } finally {
+      setConfirming(false);
+    }
+  };
 
   /** Проверить статус pending-счёта в Точке (polling fallback) */
   const handleVerifyPayment = async (invoiceId: number) => {
@@ -356,14 +376,24 @@ export function BillingPage() {
                           {INVOICE_STATUS[inv.status] || inv.status}
                         </span>
                         {inv.status === 'pending' && (
-                          <button
-                            className="btn btn--sm btn--secondary"
-                            style={{ marginLeft: 8 }}
-                            onClick={() => handleVerifyPayment(inv.id)}
-                            disabled={verifying}
-                          >
-                            {verifying ? 'Проверка...' : 'Проверить оплату'}
-                          </button>
+                          <>
+                            <button
+                              className="btn btn--sm btn--secondary"
+                              style={{ marginLeft: 8 }}
+                              onClick={() => handleVerifyPayment(inv.id)}
+                              disabled={verifying || confirming}
+                            >
+                              {verifying ? 'Проверка...' : 'Проверить'}
+                            </button>
+                            <button
+                              className="btn btn--sm btn--primary"
+                              style={{ marginLeft: 4 }}
+                              onClick={() => handleManualConfirm(inv.id)}
+                              disabled={verifying || confirming}
+                            >
+                              {confirming ? 'Подтверждение...' : 'Подтвердить оплату'}
+                            </button>
+                          </>
                         )}
                       </td>
                     </tr>
