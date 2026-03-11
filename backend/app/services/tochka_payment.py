@@ -168,6 +168,8 @@ async def create_payment_link(
     payment_link_id: Optional[str] = None,
     ttl: int = 10080,
     payment_modes: Optional[list[str]] = None,
+    redirect_url: Optional[str] = None,
+    fail_redirect_url: Optional[str] = None,
 ) -> dict:
     """
     Создаёт платёжную ссылку (POST /acquiring/v1.0/payments).
@@ -192,8 +194,8 @@ async def create_payment_link(
         "customerCode": customer_code,
         "amount": round(amount, 2),
         "purpose": purpose,
-        "redirectUrl": settings.tochka_redirect_url,
-        "failRedirectUrl": settings.tochka_fail_redirect_url,
+        "redirectUrl": redirect_url or settings.tochka_redirect_url,
+        "failRedirectUrl": fail_redirect_url or settings.tochka_fail_redirect_url,
         "paymentMode": payment_modes or ["sbp", "tinkoff", "card"],
         "ttl": ttl,
     }

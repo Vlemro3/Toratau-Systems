@@ -101,12 +101,18 @@ async def create_payment(
 
     purpose = req.purpose or f"Подписка ТОРАТАУ — {req.plan_tier} ({req.plan_interval})"
 
+    # Добавляем invoice_id в redirect URL чтобы фронт знал какой счёт верифицировать
+    base_redirect = settings.tochka_redirect_url
+    separator = "&" if "?" in base_redirect else "?"
+    redirect_with_invoice = f"{base_redirect}{separator}invoice={invoice.id}"
+
     try:
         result = await create_payment_link(
             amount=expected_amount,
             purpose=purpose,
             payment_link_id=str(invoice.id),
             payment_modes=["sbp", "tinkoff", "card"],
+            redirect_url=redirect_with_invoice,
         )
 
         invoice.tochka_operation_id = result.get("operationId", "")

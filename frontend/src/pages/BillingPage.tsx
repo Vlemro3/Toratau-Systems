@@ -82,13 +82,21 @@ export function BillingPage() {
     const params = new URLSearchParams(window.location.search);
     const paymentStatus = params.get('payment');
     if (paymentStatus === 'success') {
+      const invoiceIdFromUrl = params.get('invoice');
       window.history.replaceState({}, '', window.location.pathname);
-      // Auto-verify: найти последний pending invoice и проверить его в Точке
+      // Auto-verify: проверить конкретный invoice (из URL) или последний pending
       billingApi.getInvoices().then((invs) => {
         setInvoices(invs);
-        const pending = invs.find((i) => i.status === 'pending');
-        if (pending) {
-          handleVerifyPayment(pending.id);
+        let target: Invoice | undefined;
+        if (invoiceIdFromUrl) {
+          target = invs.find((i) => String(i.id) === invoiceIdFromUrl);
+        }
+        if (!target) {
+          // Fallback: последний pending invoice (самый новый)
+          target = [...invs].reverse().find((i) => i.status === 'pending');
+        }
+        if (target) {
+          handleVerifyPayment(target.id);
         } else {
           setPaymentSuccess(true);
           setTimeout(() => setPaymentSuccess(false), 8000);

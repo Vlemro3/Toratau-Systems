@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/billing", tags=["Billing"])
 
 PLAN_PRICES = {
-    "start": {"monthly": 1_500, "yearly": 16_200},
+    "start": {"monthly": 1, "yearly": 1},
     "business": {"monthly": 3_000, "yearly": 32_400},
     "premium": {"monthly": 5_000, "yearly": 54_000},
     "unlim": {"monthly": 10_000, "yearly": 108_000},
@@ -335,6 +335,26 @@ def simulate_payment_fail(
     )
 
     return {"subscription": _sub_to_dict(sub), "invoice": _invoice_to_dict(invoice)}
+
+
+@router.post("/cancel-stale-invoices")
+async def cancel_stale_invoices(
+    current_user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Отменить все старые pending-счета (кроме последнего)."""
+    query = db.query(models.BillingInvoice).filter(models.BillingInvoice.status == "pending")
+    if current_user.role != "superAdmin":
+        portal_id = current_user.portal_id or 0
+        query = query.filter(models.BillingInvoice.portal_id == portal_id)
+    pending = query.order_by(models.BillingInvoice.created_at.desc()).all()
+    cancelled = 0
+    for inv in pending[1:]:  # всё кроме самого нового
+        inv.status = "cancelled"
+        cancelled += 1
+    if cancelled:
+        db.commit()
+    return {"cancelled": cancelled, "kept": 1 if pending else 0}
 
 
 @router.post("/verify-payment/{invoice_id}")
