@@ -8,16 +8,8 @@ import { getCrews, deleteCrew } from '../api/crews';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DataTable } from '../components/DataTable';
+import { toTelHref, formatPhone } from '../utils/format';
 import type { Crew } from '../types';
-
-/** Нормализация номера для tel: ссылки (для звонка с мобильного) */
-function toTelHref(phone: string | undefined): string {
-  if (!phone) return '';
-  let digits = phone.replace(/\D/g, '');
-  if (digits.startsWith('8')) digits = '7' + digits.slice(1);
-  else if (digits.length === 10) digits = '7' + digits;
-  return digits.length >= 11 ? `tel:+${digits}` : '';
-}
 
 /** Разделение имени и телефона для отображения (поддержка старого формата "Имя, +7 ...") */
 function getDisplayContact(crew: Crew): { name: string; phone: string } {
@@ -116,7 +108,7 @@ export function CrewsPage() {
             <td>
               {contactPhone ? (
                 <a href={toTelHref(contactPhone)} className="table-link-tel" onClick={(e) => e.stopPropagation()}>
-                  {contactPhone}
+                  {formatPhone(contactPhone)}
                 </a>
               ) : (
                 '—'

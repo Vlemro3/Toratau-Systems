@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { getCounterparties, deleteCounterparty } from '../api/counterparties';
 import { DataTable, type Column } from '../components/DataTable';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { toTelHref, formatPhone } from '../utils/format';
 import type { Counterparty } from '../types';
 
 const ORG_TYPE_LABELS: Record<string, string> = {
@@ -93,7 +94,7 @@ export function CounterpartiesPage() {
             <td><strong>{cp.name}</strong></td>
             <td><span className="badge badge--default">{ORG_TYPE_LABELS[cp.org_type] || cp.org_type}</span></td>
             <td>{cp.inn || '—'}</td>
-            <td>{cp.phone ? <a href={`tel:${cp.phone}`}>{cp.phone}</a> : '—'}</td>
+            <td>{cp.phone ? <a href={toTelHref(cp.phone)} className="table-link-tel">{formatPhone(cp.phone)}</a> : '—'}</td>
             <td>{cp.email || '—'}</td>
             <td>
               <div className="table-actions">

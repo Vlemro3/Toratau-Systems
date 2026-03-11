@@ -5,6 +5,7 @@ import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { createCrew, getCrew, updateCrew } from '../api/crews';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { applyPhoneMask } from '../utils/format';
 import type { CrewCreate } from '../types';
 
 export function CrewFormPage() {
@@ -43,6 +44,10 @@ export function CrewFormPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
+    if (name === 'phone') {
+      setForm((prev) => ({ ...prev, phone: applyPhoneMask(value) }));
+      return;
+    }
     setForm((prev) => ({
       ...prev,
       [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value,
@@ -93,7 +98,7 @@ export function CrewFormPage() {
 
         <div className="form-group">
           <label>Телефон</label>
-          <input type="tel" name="phone" value={form.phone || ''} onChange={handleChange} placeholder="+7 (999) 123-45-67" />
+          <input type="tel" name="phone" value={form.phone || ''} onChange={handleChange} placeholder="+7 (___) ___-__-__" onFocus={(e) => { if (!e.target.value) setForm((prev) => ({ ...prev, phone: '+7 ' })); }} />
         </div>
 
         <div className="form-group">

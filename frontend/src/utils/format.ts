@@ -53,6 +53,73 @@ export function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * Телефон: нормализация номера для tel: ссылки.
+ * 8XXXXXXXXXX → +7XXXXXXXXXX, 9XXXXXXXXX → +79XXXXXXXXX
+ */
+export function toTelHref(phone: string | undefined): string {
+  if (!phone) return '';
+  let digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('8') && digits.length === 11) digits = '7' + digits.slice(1);
+  else if (digits.length === 10) digits = '7' + digits;
+  return digits.length >= 11 ? `tel:+${digits}` : '';
+}
+
+/**
+ * Форматирование телефона для отображения: +7 (XXX) XXX-XX-XX
+ */
+export function formatPhone(phone: string | undefined): string {
+  if (!phone) return '';
+  let digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('8') && digits.length === 11) digits = '7' + digits.slice(1);
+  else if (digits.length === 10) digits = '7' + digits;
+  if (digits.length === 11 && digits.startsWith('7')) {
+    return `+7 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7, 9)}-${digits.slice(9, 11)}`;
+  }
+  return phone;
+}
+
+/**
+ * Маска ввода телефона: при вводе цифр форматирует как +7 (XXX) XXX-XX-XX
+ */
+export function applyPhoneMask(value: string): string {
+  let digits = value.replace(/\D/g, '');
+  // Убираем ведущую 8 или 7
+  if (digits.startsWith('8') || digits.startsWith('7')) digits = digits.slice(1);
+  // Ограничиваем до 10 цифр (без кода страны)
+  digits = digits.slice(0, 10);
+  if (!digits) return '+7 ';
+  let result = '+7 (';
+  result += digits.slice(0, 3);
+  if (digits.length > 3) result += ') ' + digits.slice(3, 6);
+  else result += ')';
+  if (digits.length > 6) result += '-' + digits.slice(6, 8);
+  if (digits.length > 8) result += '-' + digits.slice(8, 10);
+  return result;
+}
+
+/**
+ * Конвертация даты dd.mm.yyyy → yyyy-mm-dd (для input[type=date])
+ */
+export function ruDateToISO(ruDate: string): string {
+  if (!ruDate) return '';
+  // Уже в ISO формате
+  if (/^\d{4}-\d{2}-\d{2}/.test(ruDate)) return ruDate.slice(0, 10);
+  const m = ruDate.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  return '';
+}
+
+/**
+ * Конвертация даты yyyy-mm-dd → dd.mm.yyyy (для хранения в БД)
+ */
+export function isoToRuDate(isoDate: string): string {
+  if (!isoDate) return '';
+  const m = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[3]}.${m[2]}.${m[1]}`;
+  return isoDate;
+}
+
 /** Преобразование числа в сумму прописью (рублей) */
 export function numberToWords(num: number): string {
   const ones = ['', 'один', 'два', 'три', 'четыре', 'пять', 'шесть', 'семь', 'восемь', 'девять'];

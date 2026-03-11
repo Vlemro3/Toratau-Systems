@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { getOrganizations, deleteOrganization } from '../api/organizations';
 import { DataTable, type Column } from '../components/DataTable';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { toTelHref, formatPhone } from '../utils/format';
 import type { Organization } from '../types';
 
 const IconEdit = () => (
@@ -80,7 +81,7 @@ export function OrganizationsPage() {
             <td><strong>{org.name}</strong></td>
             <td><span className="badge badge--default">{ORG_TYPE_LABELS[org.org_type] || org.org_type}</span></td>
             <td>{org.inn || '—'}</td>
-            <td>{org.phone || '—'}</td>
+            <td>{org.phone ? <a href={toTelHref(org.phone)} className="table-link-tel">{formatPhone(org.phone)}</a> : '—'}</td>
             <td>{org.email || '—'}</td>
             <td>
               <div className="table-actions">

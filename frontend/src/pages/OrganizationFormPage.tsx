@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { createOrganization, getOrganization, updateOrganization } from '../api/organizations';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { useInnAutoFill, useBikAutoFill } from '../hooks/useAutoFill';
+import { applyPhoneMask, ruDateToISO, isoToRuDate } from '../utils/format';
 import type { OrganizationCreate, OrgType } from '../types';
 
 const EMPTY_FORM: OrganizationCreate = {
@@ -126,6 +127,14 @@ export function OrganizationFormPage() {
     if (name === 'bik' && typeof newValue === 'string') {
       debouncedBikLookup(newValue);
     }
+    if (name === 'phone' && typeof newValue === 'string') {
+      setForm((prev) => ({ ...prev, phone: applyPhoneMask(newValue) }));
+      return;
+    }
+    if (name === 'ogrn_date' && typeof newValue === 'string') {
+      setForm((prev) => ({ ...prev, ogrn_date: isoToRuDate(newValue) }));
+      return;
+    }
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -220,7 +229,7 @@ export function OrganizationFormPage() {
               </div>
               <div className="form-group">
                 <label>Дата {ogrnLabel}:</label>
-                <input name="ogrn_date" value={form.ogrn_date} onChange={handleChange} placeholder="дд.мм.гггг" />
+                <input type="date" name="ogrn_date" value={ruDateToISO(form.ogrn_date || '')} onChange={handleChange} />
               </div>
             </div>
           )}
@@ -252,7 +261,7 @@ export function OrganizationFormPage() {
           <div className="form-row">
             <div className="form-group">
               <label>Телефон:</label>
-              <input name="phone" value={form.phone} onChange={handleChange} />
+              <input type="tel" name="phone" value={form.phone} onChange={handleChange} placeholder="+7 (___) ___-__-__" onFocus={(e) => { if (!e.target.value) setForm((prev) => ({ ...prev, phone: '+7 ' })); }} />
             </div>
             <div className="form-group">
               <label>Email:</label>
