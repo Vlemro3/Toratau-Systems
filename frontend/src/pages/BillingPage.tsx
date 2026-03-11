@@ -42,7 +42,7 @@ export function BillingPage() {
   const { subscription, loading, paying, remainingDays, refresh } = useSubscription();
 
   const [selectedTier, setSelectedTier] = useState<PlanTier>('business');
-  const [selectedInterval, setSelectedInterval] = useState<BillingPlan>('monthly');
+  const [selectedInterval, setSelectedInterval] = useState<BillingPlan>('yearly');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [logs, setLogs] = useState<PaymentLog[]>([]);
   const [activeTab, setActiveTab] = useState<'plan' | 'history' | 'logs'>('plan');

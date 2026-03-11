@@ -19,9 +19,9 @@ router = APIRouter(prefix="/billing", tags=["Billing"])
 
 YEARLY_DISCOUNT = 0.10
 PLAN_MONTHLY_PRICES = {
-    "start": 1,
-    "business": 3_000,
-    "premium": 5_000,
+    "start": 500,
+    "business": 1_000,
+    "premium": 2_000,
     "unlim": 10_000,
 }
 

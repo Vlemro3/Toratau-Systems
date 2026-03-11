@@ -21,19 +21,19 @@ export const BILLING_CONFIG = {
   tiers: {
     start: {
       label: 'Start',
-      priceMonthly: 1,
+      priceMonthly: 500,
       objectLimit: 3,
       highlighted: false,
     },
     business: {
       label: 'Business',
-      priceMonthly: 3_000,
+      priceMonthly: 1_000,
       objectLimit: 6,
       highlighted: true,
     },
     premium: {
       label: 'Premium',
-      priceMonthly: 5_000,
+      priceMonthly: 2_000,
       objectLimit: 10,
       highlighted: false,
     },

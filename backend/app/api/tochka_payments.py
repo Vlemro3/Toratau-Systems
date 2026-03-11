@@ -57,9 +57,9 @@ class CreatePaymentResponse(BaseModel):
 # Тарифы — месячные цены, yearly = monthly * 12 * 0.9 (скидка 10%)
 YEARLY_DISCOUNT = 0.10
 PLAN_MONTHLY_PRICES = {
-    "start": 1,
-    "business": 3_000,
-    "premium": 5_000,
+    "start": 500,
+    "business": 1_000,
+    "premium": 2_000,
     "unlim": 10_000,
 }
 
