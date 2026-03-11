@@ -54,13 +54,20 @@ class CreatePaymentResponse(BaseModel):
     status: str
 
 
-# Тарифы (дублируем из фронтенда для валидации на бэке)
-PLAN_PRICES = {
-    "start": {"monthly": 1, "yearly": 1},
-    "business": {"monthly": 3_000, "yearly": 32_400},
-    "premium": {"monthly": 5_000, "yearly": 54_000},
-    "unlim": {"monthly": 10_000, "yearly": 108_000},
+# Тарифы — месячные цены, yearly = monthly * 12 * 0.9 (скидка 10%)
+YEARLY_DISCOUNT = 0.10
+PLAN_MONTHLY_PRICES = {
+    "start": 1,
+    "business": 3_000,
+    "premium": 5_000,
+    "unlim": 10_000,
 }
+
+def get_plan_price(tier: str, interval: str) -> int:
+    monthly = PLAN_MONTHLY_PRICES.get(tier, 0)
+    if interval == "yearly":
+        return round(monthly * 12 * (1 - YEARLY_DISCOUNT))
+    return monthly
 
 
 @router.post("/create-payment", response_model=CreatePaymentResponse)
@@ -70,12 +77,12 @@ async def create_payment(
     db: Session = Depends(get_db),
 ):
     """Создать платёжную ссылку для оплаты подписки."""
-    if req.plan_tier not in PLAN_PRICES:
+    if req.plan_tier not in PLAN_MONTHLY_PRICES:
         raise HTTPException(400, f"Неизвестный тариф: {req.plan_tier}")
     if req.plan_interval not in ("monthly", "yearly"):
         raise HTTPException(400, f"Неизвестный интервал: {req.plan_interval}")
 
-    expected_amount = PLAN_PRICES[req.plan_tier][req.plan_interval]
+    expected_amount = get_plan_price(req.plan_tier, req.plan_interval)
     if abs(req.amount - expected_amount) > 1:
         raise HTTPException(400, f"Некорректная сумма. Ожидается {expected_amount} ₽")
 

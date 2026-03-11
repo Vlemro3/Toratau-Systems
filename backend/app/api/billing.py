@@ -17,12 +17,19 @@ from app.dependencies import get_current_user, require_admin
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/billing", tags=["Billing"])
 
-PLAN_PRICES = {
-    "start": {"monthly": 1, "yearly": 1},
-    "business": {"monthly": 3_000, "yearly": 32_400},
-    "premium": {"monthly": 5_000, "yearly": 54_000},
-    "unlim": {"monthly": 10_000, "yearly": 108_000},
+YEARLY_DISCOUNT = 0.10
+PLAN_MONTHLY_PRICES = {
+    "start": 1,
+    "business": 3_000,
+    "premium": 5_000,
+    "unlim": 10_000,
 }
+
+def get_plan_price(tier: str, interval: str) -> int:
+    monthly = PLAN_MONTHLY_PRICES.get(tier, 0)
+    if interval == "yearly":
+        return round(monthly * 12 * (1 - YEARLY_DISCOUNT))
+    return monthly
 
 TRIAL_DAYS = 14
 
@@ -206,12 +213,12 @@ def subscribe(
 ):
     tier = data.planTier
     interval = data.planInterval
-    if tier not in PLAN_PRICES:
+    if tier not in PLAN_MONTHLY_PRICES:
         raise HTTPException(400, f"Неизвестный тариф: {tier}")
     if interval not in ("monthly", "yearly"):
         raise HTTPException(400, f"Неизвестный интервал: {interval}")
 
-    amount = PLAN_PRICES[tier][interval]
+    amount = get_plan_price(tier, interval)
     portal_id = current_user.portal_id or 0
     now = datetime.utcnow()
     days = 365 if interval == "yearly" else 30
@@ -524,8 +531,12 @@ def activate_subscription_by_tochka(
         sub.plan_tier = invoice.plan_tier
         sub.plan_interval = invoice.plan_interval
         days = 365 if invoice.plan_interval == "yearly" else 30
+        # Если подписка ещё активна — продлеваем от конца текущего периода
+        base = now
+        if sub.current_period_end and sub.current_period_end > now:
+            base = sub.current_period_end
         sub.current_period_start = now
-        sub.current_period_end = now + timedelta(days=days)
+        sub.current_period_end = base + timedelta(days=days)
         sub.updated_at = now
 
     _add_log(
