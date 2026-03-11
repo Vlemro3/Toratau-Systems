@@ -21,7 +21,7 @@ export const BILLING_CONFIG = {
   tiers: {
     start: {
       label: 'Start',
-      priceMonthly: 1_500,
+      priceMonthly: 1,
       objectLimit: 3,
       highlighted: false,
     },

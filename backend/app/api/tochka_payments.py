@@ -56,7 +56,7 @@ class CreatePaymentResponse(BaseModel):
 
 # Тарифы (дублируем из фронтенда для валидации на бэке)
 PLAN_PRICES = {
-    "start": {"monthly": 1_500, "yearly": 16_200},
+    "start": {"monthly": 1, "yearly": 1},
     "business": {"monthly": 3_000, "yearly": 32_400},
     "premium": {"monthly": 5_000, "yearly": 54_000},
     "unlim": {"monthly": 10_000, "yearly": 108_000},
