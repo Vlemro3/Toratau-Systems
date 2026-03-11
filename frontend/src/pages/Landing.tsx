@@ -208,7 +208,7 @@ const Landing: React.FC = () => {
                     color="text.secondary"
                     sx={{ maxWidth: 320, display: 'block' }}
                   >
-                    14 дней бесплатно, тарифные планы от 1500 рублей/месяц
+                    14 дней бесплатно, тарифные планы от 500 рублей/месяц
                   </Typography>
                 </Stack>
               </Grid>
@@ -692,9 +692,9 @@ const Landing: React.FC = () => {
 
             <Grid container spacing={3}>
               {[
-                { name: 'Start', price: '1 500 ₽/мес', limit: 'До 3 объектов', highlighted: false },
-                { name: 'Business', price: '3 000 ₽/мес', limit: 'До 6 объектов', highlighted: true },
-                { name: 'Premium', price: '5 000 ₽/мес', limit: 'До 10 объектов', highlighted: false },
+                { name: 'Start', price: '500 ₽/мес', limit: 'До 3 объектов', highlighted: false },
+                { name: 'Business', price: '1 000 ₽/мес', limit: 'До 6 объектов', highlighted: true },
+                { name: 'Premium', price: '2 000 ₽/мес', limit: 'До 10 объектов', highlighted: false },
                 { name: 'Unlim', price: '10 000 ₽/мес', limit: 'Объектов без ограничений', highlighted: false },
               ].map((plan) => (
                 <Grid size={{ xs: 12, sm: 6, md: 3 }} key={plan.name}>
