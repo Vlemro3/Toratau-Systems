@@ -193,11 +193,30 @@ async def debug_verify(
             "created_at": str(invoice.created_at),
         },
         "search_plid": invoice.tochka_payment_link_id or str(invoice.id),
+        "payment_info": None,
+        "payment_info_error": None,
         "tochka_payments": [],
         "matched": None,
-        "error": None,
+        "payment_list_error": None,
     }
 
+    # 1) Прямой запрос по operationId (основной метод)
+    if invoice.tochka_operation_id:
+        try:
+            info = await get_payment_info(invoice.tochka_operation_id)
+            result["payment_info"] = {
+                "operationId": info.get("operationId", ""),
+                "status": info.get("status", ""),
+                "amount": info.get("amount", ""),
+                "paymentLinkId": info.get("paymentLinkId", ""),
+                "purpose": info.get("purpose", ""),
+                "paidAt": info.get("paidAt", ""),
+                "paymentType": info.get("paymentType", ""),
+            }
+        except TochkaPaymentError as e:
+            result["payment_info_error"] = str(e)
+
+    # 2) Список операций (fallback)
     try:
         from datetime import date
         today = date.today().isoformat()
@@ -218,7 +237,7 @@ async def debug_verify(
             if summary["paymentLinkId"] == search_plid:
                 result["matched"] = summary
     except TochkaPaymentError as e:
-        result["error"] = str(e)
+        result["payment_list_error"] = str(e)
 
     return result
 
