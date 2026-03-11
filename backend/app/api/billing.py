@@ -542,9 +542,14 @@ def activate_subscription_by_tochka(
         sub.plan_interval = invoice.plan_interval
         days = 365 if invoice.plan_interval == "yearly" else 30
         # Если подписка ещё активна — продлеваем от конца текущего периода
+        # Приводим к naive UTC для корректного сравнения
         base = now
-        if sub.current_period_end and sub.current_period_end > now:
-            base = sub.current_period_end
+        end = sub.current_period_end
+        if end is not None:
+            if end.tzinfo is not None:
+                end = end.replace(tzinfo=None)
+            if end > now:
+                base = end
         sub.current_period_start = now
         sub.current_period_end = base + timedelta(days=days)
         sub.updated_at = now
