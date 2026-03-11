@@ -402,51 +402,61 @@ async def verify_payment(
     tochka_status = ""
     found_operation_id = ""
 
-    # Основной способ: прямой запрос по operationId (самый надёжный)
-    if invoice.tochka_operation_id:
-        try:
-            info = await get_payment_info(invoice.tochka_operation_id)
-            st = info.get("status", "")
-            logger.warning("Verify payment (by operationId=%s): status=%s, all_keys=%s",
-                           invoice.tochka_operation_id, st, list(info.keys()) if isinstance(info, dict) else "?")
-            if st in PAID_STATUSES:
-                tochka_status = st
-                found_operation_id = invoice.tochka_operation_id
-        except TochkaPaymentError as e:
-            logger.warning("Verify payment: get_payment_info failed: %s", e)
+    try:
+        # Основной способ: прямой запрос по operationId (самый надёжный)
+        if invoice.tochka_operation_id:
+            try:
+                info = await get_payment_info(invoice.tochka_operation_id)
+                st = info.get("status", "")
+                logger.warning("Verify payment (by operationId=%s): status=%s, all_keys=%s",
+                               invoice.tochka_operation_id, st, list(info.keys()) if isinstance(info, dict) else "?")
+                if st in PAID_STATUSES:
+                    tochka_status = st
+                    found_operation_id = invoice.tochka_operation_id
+            except TochkaPaymentError as e:
+                logger.warning("Verify payment: get_payment_info failed: %s", e)
 
-    # Fallback: поиск через Get Payment Operation List по paymentLinkId
-    if tochka_status not in PAID_STATUSES:
-        search_plid = invoice.tochka_payment_link_id or str(invoice.id)
-        try:
-            from datetime import date
-            today = date.today().isoformat()
-            created = invoice.created_at.strftime("%Y-%m-%d") if invoice.created_at else today
-            payments = await get_payment_list(from_date=created, to_date=today)
+        # Fallback: поиск через Get Payment Operation List по paymentLinkId
+        if tochka_status not in PAID_STATUSES:
+            search_plid = invoice.tochka_payment_link_id or str(invoice.id)
+            try:
+                from datetime import date
+                today = date.today().isoformat()
+                created = invoice.created_at.strftime("%Y-%m-%d") if invoice.created_at else today
+                payments = await get_payment_list(from_date=created, to_date=today)
 
-            logger.warning("Verify payment: got %d operations, searching for paymentLinkId=%s", len(payments), search_plid)
+                logger.warning("Verify payment: got %d operations, searching for paymentLinkId=%s", len(payments), search_plid)
 
-            for p in payments:
-                plid = p.get("paymentLinkId", "")
-                pstatus = p.get("status", "")
-                if plid == search_plid and pstatus in PAID_STATUSES:
-                    tochka_status = pstatus
-                    found_operation_id = p.get("operationId", "")
-                    logger.warning("Verify payment: MATCH found — %s, operationId=%s", pstatus, found_operation_id)
-                    break
-        except TochkaPaymentError as e:
-            logger.warning("Verify payment: get_payment_list failed: %s", e)
+                for p in payments:
+                    plid = p.get("paymentLinkId", "")
+                    pstatus = p.get("status", "")
+                    if plid == search_plid and pstatus in PAID_STATUSES:
+                        tochka_status = pstatus
+                        found_operation_id = p.get("operationId", "")
+                        logger.warning("Verify payment: MATCH found — %s, operationId=%s", pstatus, found_operation_id)
+                        break
+            except TochkaPaymentError as e:
+                logger.warning("Verify payment: get_payment_list failed: %s", e)
 
-    logger.warning("Verify payment: invoice #%d, final tochka_status=%s", invoice_id, tochka_status)
+        logger.warning("Verify payment: invoice #%d, final tochka_status=%s", invoice_id, tochka_status)
 
-    if tochka_status in PAID_STATUSES:
-        activated = activate_subscription_by_tochka(
-            db, found_operation_id or invoice.tochka_operation_id or "",
-            invoice_id=invoice.id,
-        )
-        if activated:
-            db.refresh(invoice)
-            return {"subscription": _sub_to_dict(_get_sub_for_invoice()), "invoice": _invoice_to_dict(invoice), "verified": True}
+        if tochka_status in PAID_STATUSES:
+            activated = activate_subscription_by_tochka(
+                db, found_operation_id or invoice.tochka_operation_id or "",
+                invoice_id=invoice.id,
+            )
+            if activated:
+                db.refresh(invoice)
+                return {"subscription": _sub_to_dict(_get_sub_for_invoice()), "invoice": _invoice_to_dict(invoice), "verified": True}
+
+    except Exception as e:
+        logger.error("Verify payment: unexpected error for invoice #%d: %s", invoice_id, str(e), exc_info=True)
+        return {
+            "subscription": _sub_to_dict(_get_sub_for_invoice()),
+            "invoice": _invoice_to_dict(invoice),
+            "verified": False,
+            "tochkaStatus": f"error: {str(e)[:100]}",
+        }
 
     return {
         "subscription": _sub_to_dict(_get_sub_for_invoice()),
