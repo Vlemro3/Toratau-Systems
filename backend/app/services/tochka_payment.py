@@ -247,16 +247,22 @@ async def get_payment_info(operation_id: str) -> dict:
                            list(raw.keys()) if isinstance(raw, dict) else type(raw).__name__,
                            resp.status_code)
 
-            # Точка оборачивает ответ в {"Operation": [...]}
-            operations = raw.get("Operation", raw.get("Data", []))
+            # Точка оборачивает ответ в {"Data": {"Operation": [{...}]}}
+            # Снимаем обёртку Data, затем Operation
+            data = raw.get("Data", raw)
+            if isinstance(data, dict):
+                operations = data.get("Operation", data.get("operations", []))
+            else:
+                operations = data
+
             if isinstance(operations, list) and operations:
                 result = operations[0]
                 logger.warning("Tochka get_payment_info parsed: status=%s, operationId=%s",
                                result.get("status", "?"), result.get("operationId", "?"))
                 return result
-            if isinstance(operations, dict):
-                return operations
-            # Fallback: если ответ сам содержит operationId
+            # Если Data сам содержит operationId (без Operation обёртки)
+            if isinstance(data, dict) and "operationId" in data:
+                return data
             if isinstance(raw, dict) and "operationId" in raw:
                 return raw
             logger.warning("Tochka get_payment_info: unexpected format, returning raw: %s", str(raw)[:500])
@@ -295,20 +301,27 @@ async def get_payment_list(
             raw = resp.json()
             logger.warning("Tochka get_payment_list raw response keys: %s", list(raw.keys()) if isinstance(raw, dict) else type(raw).__name__)
 
-            # Точка может оборачивать в "Operation", "Data", или вернуть list
+            # Точка оборачивает: {"Data": {"Operation": [...]}, "Links": ..., "Meta": ...}
+            # Снимаем Data, затем Operation
             result = []
             if isinstance(raw, list):
                 result = raw
             elif isinstance(raw, dict):
-                # Проверяем все возможные ключи-обёртки
-                for key in ("Operation", "Data", "payments", "Payments"):
-                    val = raw.get(key)
-                    if isinstance(val, list):
-                        result = val
-                        break
-                    elif isinstance(val, dict) and "operationId" in val:
-                        result = [val]
-                        break
+                data = raw.get("Data", raw)
+                if isinstance(data, dict):
+                    # Внутри Data ищем Operation или список
+                    for key in ("Operation", "operations", "payments", "Payments"):
+                        val = data.get(key)
+                        if isinstance(val, list):
+                            result = val
+                            break
+                        elif isinstance(val, dict) and "operationId" in val:
+                            result = [val]
+                            break
+                    if not result and "operationId" in data:
+                        result = [data]
+                elif isinstance(data, list):
+                    result = data
                 if not result and "operationId" in raw:
                     result = [raw]
 
