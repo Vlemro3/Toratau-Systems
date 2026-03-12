@@ -143,6 +143,7 @@ export function WorkLogFormPage() {
         <div className="form-group">
           <label>Вид работ *</label>
           <select name="work_type_id" value={form.work_type_id} onChange={handleChange}>
+            <option value={0} disabled>— Выберите вид работ —</option>
             {workTypes.map((wt) => (
               <option key={wt.id} value={wt.id}>{wt.name} ({wt.unit}, {formatMoney(wt.rate)}/ед.)</option>
             ))}
@@ -153,6 +154,7 @@ export function WorkLogFormPage() {
         <div className="form-group">
           <label>Бригада *</label>
           <select name="crew_id" value={form.crew_id} onChange={handleChange}>
+            <option value={0} disabled>— Выберите бригаду —</option>
             {crews.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
           </select>
         </div>

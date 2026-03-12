@@ -122,6 +122,7 @@ export function PayoutFormPage() {
         <div className="form-group">
           <label>Бригада *</label>
           <select name="crew_id" value={form.crew_id} onChange={handleChange}>
+            <option value={0} disabled>— Выберите бригаду —</option>
             {crews.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
             <option value="__new__">+ Добавить контакт...</option>
           </select>
