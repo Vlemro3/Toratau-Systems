@@ -192,8 +192,169 @@ def delete_counterparty_stub(
     raise HTTPException(status_code=404, detail="Контрагент не найден")
 
 
+_documents_store: list[dict[str, Any]] = []
+_document_next_id = 1
+
+
+class DocumentCreateStub(BaseModel):
+    counterparty_id: int
+    organization_id: int | None = None
+    doc_type: str = "payment_invoice"
+    number: str | None = None
+    date: str | None = None
+    basis: str | None = None
+    items: list[dict[str, Any]] | None = None
+    notes: str | None = None
+    taxation: str | None = None
+    investor_id: int | None = None
+    construction_name: str | None = None
+    construction_address: str | None = None
+    object_name: str | None = None
+    okdp: str | None = None
+    contract_number: str | None = None
+    contract_date: str | None = None
+    operation_type: str | None = None
+    estimated_cost: float | None = None
+    period_from: str | None = None
+    period_to: str | None = None
+    print_vat_amounts: bool | None = None
+    contract_creation_date: str | None = None
+    contract_location: str | None = None
+    premises_area: float | None = None
+    premises_address: str | None = None
+    transfer_date_from: str | None = None
+    premises_condition: str | None = None
+    valid_until: str | None = None
+    goods_source: str | None = None
+    person_name_dative: str | None = None
+    passport_series: str | None = None
+    passport_number: str | None = None
+    passport_issued_by: str | None = None
+    passport_issue_date: str | None = None
+    consumer_type: str | None = None
+    payer_type: str | None = None
+    text_above: str | None = None
+    text_below: str | None = None
+    payment_purpose: str | None = None
+    delivery_address: str | None = None
+    contract_text: str | None = None
+    add_buyer_signature: bool | None = None
+    correction_number: str | None = None
+    correction_date: str | None = None
+    advance_invoice: str | None = None
+    payment_doc_number: str | None = None
+    payment_doc_date: str | None = None
+    shipment_doc_name: str | None = None
+    shipment_doc_number: str | None = None
+    shipment_doc_date: str | None = None
+    had_advance_invoices: bool | None = None
+    state_contract_id: str | None = None
+    currency: str | None = None
+    form_version: str | None = None
+    shipper_type: str | None = None
+    consignee_type: str | None = None
+    torg12_form_version: str | None = None
+    torg12_supplier_type: str | None = None
+    torg12_consignee_type: str | None = None
+    basis_number: str | None = None
+    basis_date: str | None = None
+    basis_number2: str | None = None
+    basis_date2: str | None = None
+    transport_waybill_name: str | None = None
+    transport_waybill_number: str | None = None
+    transport_waybill_date: str | None = None
+    attachment_sheets: int | None = None
+    shipment_date_matches_doc: bool | None = None
+    shipment_date: str | None = None
+    add_discount_markup: bool | None = None
+    ks3_reporting_period_from: str | None = None
+    ks3_reporting_period_to: str | None = None
+
+    class Config:
+        extra = "allow"
+
+
+def _doc_to_response(d: dict) -> dict:
+    return d
+
+
+def _calc_total(items: list[dict[str, Any]] | None) -> float:
+    if not items:
+        return 0.0
+    total = 0.0
+    for item in items:
+        qty = float(item.get("qty", 0) or 0)
+        price = float(item.get("price", 0) or 0)
+        total += qty * price
+    return total
+
+
 @router.get("/documents")
 def get_documents_stub(
+    counterparty_id: int | None = None,
     current_user: models.User = Depends(get_current_user),
 ):
-    return []
+    if counterparty_id is not None:
+        return [_doc_to_response(d) for d in _documents_store if d.get("counterparty_id") == counterparty_id]
+    return [_doc_to_response(d) for d in _documents_store]
+
+
+@router.get("/documents/{document_id}")
+def get_document_stub(
+    document_id: int,
+    current_user: models.User = Depends(get_current_user),
+):
+    for d in _documents_store:
+        if d["id"] == document_id:
+            return _doc_to_response(d)
+    raise HTTPException(status_code=404, detail="Документ не найден")
+
+
+@router.post("/documents")
+def create_document_stub(
+    data: DocumentCreateStub,
+    current_user: models.User = Depends(get_current_user),
+):
+    global _document_next_id
+    now = datetime.utcnow().isoformat() + "Z"
+    raw = data.model_dump()
+    items = raw.get("items") or []
+    doc = {
+        **raw,
+        "id": _document_next_id,
+        "items": items,
+        "total": _calc_total(items),
+        "created_at": now,
+    }
+    _documents_store.append(doc)
+    _document_next_id += 1
+    return _doc_to_response(doc)
+
+
+@router.put("/documents/{document_id}")
+def update_document_stub(
+    document_id: int,
+    data: DocumentCreateStub,
+    current_user: models.User = Depends(get_current_user),
+):
+    for d in _documents_store:
+        if d["id"] == document_id:
+            raw = data.model_dump(exclude_unset=True)
+            d.update(raw)
+            if "items" in raw:
+                d["total"] = _calc_total(d.get("items"))
+            return _doc_to_response(d)
+    raise HTTPException(status_code=404, detail="Документ не найден")
+
+
+@router.delete("/documents/{document_id}", status_code=204)
+def delete_document_stub(
+    document_id: int,
+    current_user: models.User = Depends(get_current_user),
+):
+    global _documents_store
+    for i, d in enumerate(_documents_store):
+        if d["id"] == document_id:
+            _documents_store.pop(i)
+            return
+    raise HTTPException(status_code=404, detail="Документ не найден")
