@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, type SetStateAction } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type SetStateAction } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   getEstimate, generateLSR, runCompare, updateEstimateLSR,
@@ -303,7 +303,7 @@ const spreadsheetStyles = `
 .est-sheet td.col-name-cell textarea:focus { background: #eff6ff; }
 .est-sheet tbody tr:hover td.col-name-cell textarea { background: #f8fafc; }
 .est-sheet tbody tr:hover td.col-name-cell textarea:focus { background: #eff6ff; }
-.est-sheet th { background: #f2f4f7; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; padding: 4px 6px; text-align: center; position: sticky; top: 0; z-index: 2; }
+.est-sheet th { background: #f2f4f7; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; padding: 4px 6px; text-align: center; position: sticky; top: 0; z-index: 2; position: relative; }
 .est-sheet td input { width: 100%; height: 100%; border: none; outline: none; background: transparent; padding: 2px 6px; font-size: 12px; font-family: inherit; box-sizing: border-box; }
 .est-sheet td input:focus { background: #eff6ff; }
 .est-sheet td input[type="number"] { text-align: right; -moz-appearance: textfield; }
@@ -325,7 +325,78 @@ const spreadsheetStyles = `
 .est-sheet .col-total { width: 90px; }
 .est-sheet .col-labor { width: 65px; }
 .est-sheet .col-cost { width: 75px; }
+.est-sheet th .col-resize { position: absolute; right: 0; top: 0; bottom: 0; width: 5px; cursor: col-resize; user-select: none; z-index: 3; }
+.est-sheet th .col-resize:hover, .est-sheet th .col-resize.active { background: #3b82f6; opacity: 0.5; }
 `;
+
+/** Hook: attach column-resize drag handlers to a table via ref */
+function useColumnResize() {
+  const tableRef = useRef<HTMLTableElement>(null);
+
+  useEffect(() => {
+    const table = tableRef.current;
+    if (!table) return;
+    const heads = table.querySelectorAll<HTMLTableCellElement>('thead th');
+    const handles: HTMLDivElement[] = [];
+
+    heads.forEach((th) => {
+      const handle = document.createElement('div');
+      handle.className = 'col-resize';
+      th.style.position = 'relative';
+      th.appendChild(handle);
+      handles.push(handle);
+    });
+
+    let startX = 0;
+    let startW = 0;
+    let currentTh: HTMLTableCellElement | null = null;
+    let activeHandle: HTMLDivElement | null = null;
+
+    function onMouseMove(e: MouseEvent) {
+      if (!currentTh) return;
+      const newW = Math.max(24, startW + (e.clientX - startX));
+      currentTh.style.width = newW + 'px';
+    }
+
+    function onMouseUp() {
+      if (activeHandle) activeHandle.classList.remove('active');
+      currentTh = null;
+      activeHandle = null;
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+
+    function onMouseDown(e: MouseEvent) {
+      const handle = e.currentTarget as HTMLDivElement;
+      const th = handle.parentElement as HTMLTableCellElement;
+      startX = e.clientX;
+      startW = th.offsetWidth;
+      currentTh = th;
+      activeHandle = handle;
+      handle.classList.add('active');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+      e.preventDefault();
+    }
+
+    handles.forEach((h) => h.addEventListener('mousedown', onMouseDown));
+
+    return () => {
+      handles.forEach((h) => {
+        h.removeEventListener('mousedown', onMouseDown);
+        h.remove();
+      });
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+  }, []);
+
+  return tableRef;
+}
 
 function PositionsTab({
   positions,
@@ -338,6 +409,8 @@ function PositionsTab({
   setDirty: (d: boolean) => void;
   totalSum: number;
 }) {
+  const resizeRef = useColumnResize();
+
   const update = useCallback(
     (index: number, field: keyof EstimatePosition, value: string | number) => {
       setPositions((prev) =>
@@ -365,7 +438,7 @@ function PositionsTab({
         <div className="dash-kpi"><div className="dash-kpi__icon">💰</div><div className="dash-kpi__body"><div className="dash-kpi__value">{formatMoney(totalSum)}</div><div className="dash-kpi__label">Общая сумма</div></div></div>
       </div>
       <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 300px)', border: '1px solid #d0d5dd', borderRadius: 6 }}>
-        <table className="est-sheet">
+        <table className="est-sheet" ref={resizeRef}>
           <thead>
             <tr>
               <th className="col-num">№</th>
@@ -461,6 +534,7 @@ function LSRTab({
   setPositions: React.Dispatch<React.SetStateAction<LSRPosition[]>>;
   saveButton?: React.ReactNode;
 }) {
+  const resizeRef = useColumnResize();
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addMode, setAddMode] = useState<'from_rates' | 'new_rate'>('from_rates');
   const [workTypes, setWorkTypes] = useState<WorkType[]>([]);
@@ -617,7 +691,7 @@ function LSRTab({
       </div>
 
       <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 320px)', border: '1px solid #d0d5dd', borderRadius: 6 }}>
-        <table className="est-sheet">
+        <table className="est-sheet" ref={resizeRef}>
           <thead>
             <tr>
               <th className="col-lsr-num">№</th>
@@ -775,6 +849,7 @@ function CompareTab({
   totalCustomer: number;
   totalOur: number;
 }) {
+  const resizeRef = useColumnResize();
   const totalDiff = totalCustomer - totalOur;
   const possibleProfit = totalDiff;
   const totalDiffPct = totalCustomer > 0 ? Math.round((totalDiff / totalCustomer) * 100) : 0;
@@ -845,7 +920,7 @@ function CompareTab({
       </div>
 
       <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 320px)', border: '1px solid #d0d5dd', borderRadius: 6 }}>
-        <table className="est-sheet">
+        <table className="est-sheet" ref={resizeRef}>
           <thead>
             <tr>
               <th className="col-cmp-num">№</th>
