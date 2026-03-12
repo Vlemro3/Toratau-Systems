@@ -35,6 +35,7 @@ import { CounterpartyFormPage } from './pages/CounterpartyFormPage';
 import { CounterpartyDocumentsPage } from './pages/CounterpartyDocumentsPage';
 import { DocumentFormPage } from './pages/DocumentFormPage';
 import { DocumentTemplatesPage } from './pages/DocumentTemplatesPage';
+import { DocumentsPage } from './pages/DocumentsPage';
 import { BillingPage } from './pages/BillingPage';
 import { EstimatesListPage } from './pages/estimates/EstimatesListPage';
 import { EstimateCreatePage } from './pages/estimates/EstimateCreatePage';
@@ -169,6 +170,11 @@ export default function App() {
             } />
             <Route path="/counterparties/:cpId/documents/:id/edit" element={
               <ProtectedRoute requiredRole="admin"><DocumentFormPage /></ProtectedRoute>
+            } />
+
+            {/* Все документы (общий раздел) */}
+            <Route path="/documents" element={
+              <ProtectedRoute requiredRole="admin"><DocumentsPage /></ProtectedRoute>
             } />
 
             {/* Шаблоны документов */}

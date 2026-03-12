@@ -107,6 +107,12 @@ export function Sidebar({ open, onClose }: Props) {
             </NavLink>
           )}
           {isAdmin && (
+            <NavLink to="/documents" className={linkClass} onClick={onClose}>
+              <span className="sidebar__icon">📑</span>
+              <span className="sidebar__text">Документы</span>
+            </NavLink>
+          )}
+          {isAdmin && (
             <NavLink to="/contacts" className={linkClass} onClick={onClose}>
               <span className="sidebar__icon">📇</span>
               <span className="sidebar__text">Контакты подрядчиков</span>
