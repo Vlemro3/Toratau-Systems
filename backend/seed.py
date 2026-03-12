@@ -118,8 +118,55 @@ def seed():
 
         db.commit()
         print("Seed completed: demo portal (owner/admin/foreman), superadmin.")
+
+        # --- Backfill: добавить контакты по умолчанию во все порталы ---
+        _ensure_default_crews(db)
+
     finally:
         db.close()
+
+
+DEFAULT_CREWS = [
+    {
+        "name": 'ООО "ИДЕАЛСТРОЙИНВЕСТ"',
+        "contact": "Черная Яна",
+        "phone": "+7 (917) 360-00-91",
+        "notes": "Аутсорсинг производственно-технического отдела с предоставлением инженеров ПТО на объект. Исполнительная документация, сдача объектов.",
+    },
+    {
+        "name": 'ООО "ТРУДОГОУ"',
+        "contact": "Хасанова Ольга",
+        "phone": "+7 (903) 311-13-05",
+        "notes": "Разнорабочие, подсобники, погрузка/разгрузка. Аутсорсинг рабочего персонала по всей России: услуги разнорабочих и грузчиков для строительных компаний и бизнеса. Погрузка/разгрузка",
+    },
+]
+
+
+def _ensure_default_crews(db):
+    """Add default crew contacts to every portal that doesn't have them yet."""
+    portals = db.query(models.Portal).all()
+    added = 0
+    for portal in portals:
+        for crew_data in DEFAULT_CREWS:
+            exists = db.query(models.Crew).filter(
+                models.Crew.portal_id == portal.id,
+                models.Crew.name == crew_data["name"],
+            ).first()
+            if not exists:
+                db.add(models.Crew(
+                    portal_id=portal.id,
+                    name=crew_data["name"],
+                    contact=crew_data["contact"],
+                    phone=crew_data["phone"],
+                    notes=crew_data["notes"],
+                    is_active=True,
+                ))
+                added += 1
+    if added:
+        db.commit()
+        print(f"Default crews backfill: added {added} crew(s) across {len(portals)} portal(s).")
+    else:
+        print("Default crews backfill: all portals already have default crews.")
 
 
 if __name__ == "__main__":

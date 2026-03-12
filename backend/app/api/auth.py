@@ -110,6 +110,26 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
         notes="",
     )
     db.add(project)
+    # Контакты подрядчиков по умолчанию
+    default_crews = [
+        models.Crew(
+            portal_id=portal.id,
+            name='ООО "ИДЕАЛСТРОЙИНВЕСТ"',
+            contact="Черная Яна",
+            phone="+7 (917) 360-00-91",
+            notes="Аутсорсинг производственно-технического отдела с предоставлением инженеров ПТО на объект. Исполнительная документация, сдача объектов.",
+            is_active=True,
+        ),
+        models.Crew(
+            portal_id=portal.id,
+            name='ООО "ТРУДОГОУ"',
+            contact="Хасанова Ольга",
+            phone="+7 (903) 311-13-05",
+            notes="Разнорабочие, подсобники, погрузка/разгрузка. Аутсорсинг рабочего персонала по всей России: услуги разнорабочих и грузчиков для строительных компаний и бизнеса. Погрузка/разгрузка",
+            is_active=True,
+        ),
+    ]
+    db.add_all(default_crews)
     db.commit()
     db.refresh(portal)
     db.refresh(user)
