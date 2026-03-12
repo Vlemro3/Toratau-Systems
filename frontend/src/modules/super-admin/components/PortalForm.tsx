@@ -11,10 +11,10 @@ interface Props {
 }
 
 const PLAN_OPTIONS: { value: PortalPlan; label: string }[] = [
-  { value: 'free', label: 'Free' },
-  { value: 'basic', label: 'Basic' },
-  { value: 'pro', label: 'Pro' },
-  { value: 'enterprise', label: 'Enterprise' },
+  { value: 'start', label: 'Start' },
+  { value: 'business', label: 'Business' },
+  { value: 'premium', label: 'Premium' },
+  { value: 'unlim', label: 'Unlim' },
 ];
 
 const STATUS_OPTIONS: { value: PortalStatus; label: string }[] = [
@@ -25,7 +25,9 @@ const STATUS_OPTIONS: { value: PortalStatus; label: string }[] = [
 export function PortalForm({ portal, onSubmit, onCancel }: Props) {
   const [name, setName] = useState(portal?.name || '');
   const [ownerEmail, setOwnerEmail] = useState(portal?.ownerEmail || '');
-  const [plan, setPlan] = useState<PortalPlan>(portal?.subscription.plan || 'free');
+  const [plan, setPlan] = useState<PortalPlan>(
+    (PLAN_OPTIONS.some((o) => o.value === portal?.subscription.plan) ? portal?.subscription.plan : 'start') as PortalPlan
+  );
   const [isPaid, setIsPaid] = useState(portal?.subscription.isPaid ?? false);
   const [paidUntil, setPaidUntil] = useState(
     portal?.subscription.paidUntil ? portal.subscription.paidUntil.slice(0, 10) : ''

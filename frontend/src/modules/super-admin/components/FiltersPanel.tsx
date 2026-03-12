@@ -22,10 +22,10 @@ const STATUS_OPTIONS: { value: PortalStatus | 'all'; label: string }[] = [
 
 const PLAN_OPTIONS: { value: PortalPlan | 'all'; label: string }[] = [
   { value: 'all', label: 'Все тарифы' },
-  { value: 'free', label: 'Free' },
-  { value: 'basic', label: 'Basic' },
-  { value: 'pro', label: 'Pro' },
-  { value: 'enterprise', label: 'Enterprise' },
+  { value: 'start', label: 'Start' },
+  { value: 'business', label: 'Business' },
+  { value: 'premium', label: 'Premium' },
+  { value: 'unlim', label: 'Unlim' },
 ];
 
 const PAID_OPTIONS: { value: 'all' | 'paid' | 'unpaid'; label: string }[] = [

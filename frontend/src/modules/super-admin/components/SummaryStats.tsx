@@ -21,12 +21,13 @@ export function SummaryStats({ portals }: Props) {
 
   // MRR (Monthly Recurring Revenue) - только платные активные порталы
   const mrr = portals
-    .filter((p) => p.status === 'active' && p.subscription.isPaid && p.subscription.plan !== 'free')
+    .filter((p) => p.status === 'active' && p.subscription.isPaid)
     .reduce((sum, p) => {
       const planPrices: Record<string, number> = {
-        basic: 5000,
-        pro: 10000,
-        enterprise: 20000,
+        start: 500,
+        business: 1000,
+        premium: 2000,
+        unlim: 10000,
       };
       return sum + (planPrices[p.subscription.plan] || 0);
     }, 0);

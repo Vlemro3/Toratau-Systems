@@ -39,7 +39,7 @@ describe('Portals CRUD', () => {
     expect(portal.name).toBe('Test Portal');
     expect(portal.ownerEmail).toBe('owner@test.com');
     expect(portal.status).toBe('active');
-    expect(portal.subscription.plan).toBe('free');
+    expect(portal.subscription.plan).toBe('start');
     expect(portal.subscription.isPaid).toBe(false);
     expect(portal.usersCount).toBe(0);
     expect(portal.limits.maxUsers).toBe(10);
@@ -51,7 +51,7 @@ describe('Portals CRUD', () => {
       name: 'Pro Portal',
       ownerEmail: 'pro@test.com',
       subscription: {
-        plan: 'pro',
+        plan: 'premium',
         isPaid: true,
         paidUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       },
@@ -64,7 +64,7 @@ describe('Portals CRUD', () => {
 
     const portal = store.createPortal(data);
 
-    expect(portal.subscription.plan).toBe('pro');
+    expect(portal.subscription.plan).toBe('premium');
     expect(portal.subscription.isPaid).toBe(true);
     expect(portal.limits.maxUsers).toBe(50);
     expect(portal.limits.maxStorageMb).toBe(5000);
@@ -167,7 +167,7 @@ describe('Expired subscriptions', () => {
       name: 'Test',
       ownerEmail: 'test@test.com',
       subscription: {
-        plan: 'basic',
+        plan: 'business',
         isPaid: true,
         paidUntil: pastDate,
       },
@@ -182,7 +182,7 @@ describe('Expired subscriptions', () => {
       name: 'Test',
       ownerEmail: 'test@test.com',
       subscription: {
-        plan: 'basic',
+        plan: 'business',
         isPaid: true,
         paidUntil: futureDate,
       },
@@ -196,7 +196,7 @@ describe('Expired subscriptions', () => {
       name: 'Test',
       ownerEmail: 'test@test.com',
       subscription: {
-        plan: 'basic',
+        plan: 'business',
         isPaid: true,
         paidUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       },
@@ -226,7 +226,7 @@ describe('Portal filtering and sorting', () => {
       name: 'Portal C',
       ownerEmail: 'c@test.com',
       status: 'active',
-      subscription: { plan: 'pro', isPaid: true, paidUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() },
+      subscription: { plan: 'premium', isPaid: true, paidUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() },
     });
   });
 
@@ -241,7 +241,7 @@ describe('Portal filtering and sorting', () => {
 
   it('filters portals by plan', () => {
     const all = store.getAllPortals();
-    const pro = all.filter((p) => p.subscription.plan === 'pro');
+    const pro = all.filter((p) => p.subscription.plan === 'premium');
 
     expect(pro.length).toBe(1);
     expect(pro[0].name).toBe('Portal C');

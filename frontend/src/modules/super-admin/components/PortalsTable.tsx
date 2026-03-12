@@ -16,10 +16,10 @@ type SortField = 'createdAt' | 'paidUntil' | 'usersCount' | 'name';
 type SortDirection = 'asc' | 'desc';
 
 const PLAN_LABELS: Record<PortalPlan, string> = {
-  free: 'Free',
-  basic: 'Basic',
-  pro: 'Pro',
-  enterprise: 'Enterprise',
+  start: 'Start',
+  business: 'Business',
+  premium: 'Premium',
+  unlim: 'Unlim',
 };
 
 const STATUS_LABELS: Record<PortalStatus, string> = {

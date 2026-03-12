@@ -154,7 +154,7 @@ const DEMO_PORTALS: Portal[] = [
     createdAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(),
     usersCount: 15,
     subscription: {
-      plan: 'pro',
+      plan: 'premium',
       isPaid: true,
       paidUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     },
@@ -171,7 +171,7 @@ const DEMO_PORTALS: Portal[] = [
     createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
     usersCount: 3,
     subscription: {
-      plan: 'basic',
+      plan: 'business',
       isPaid: false,
       paidUntil: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), // Просрочен
     },
@@ -188,7 +188,7 @@ const DEMO_PORTALS: Portal[] = [
     createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
     usersCount: 0,
     subscription: {
-      plan: 'free',
+      plan: 'start',
       isPaid: false,
       paidUntil: null,
     },
@@ -411,7 +411,7 @@ class MockStore {
       ownerEmail: data.email,
       createdAt: now,
       usersCount: 1,
-      subscription: { plan: 'free', isPaid: false, paidUntil: null },
+      subscription: { plan: 'start', isPaid: false, paidUntil: null },
       status: 'active',
       limits: { maxUsers: 10, maxStorageMb: 500 },
     };
@@ -1382,7 +1382,7 @@ class MockStore {
       createdAt: now,
       usersCount: 0,
       subscription: {
-        plan: data.subscription?.plan || 'free',
+        plan: data.subscription?.plan || 'start',
         isPaid: data.subscription?.isPaid ?? false,
         paidUntil: data.subscription?.paidUntil || null,
       },

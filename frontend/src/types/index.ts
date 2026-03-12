@@ -602,7 +602,7 @@ export interface LoginResponse {
 }
 
 /* ---- Порталы (Super Admin) ---- */
-export type PortalPlan = 'free' | 'basic' | 'pro' | 'enterprise';
+export type PortalPlan = 'start' | 'business' | 'premium' | 'unlim';
 export type PortalStatus = 'active' | 'blocked';
 
 export interface Portal {

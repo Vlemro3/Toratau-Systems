@@ -10,10 +10,10 @@ import { EmptyState } from '../../../components/EmptyState';
 import type { Portal, PortalUpdate } from '../../../types';
 
 const PLAN_LABELS: Record<string, string> = {
-  free: 'Free',
-  basic: 'Basic',
-  pro: 'Pro',
-  enterprise: 'Enterprise',
+  start: 'Start',
+  business: 'Business',
+  premium: 'Premium',
+  unlim: 'Unlim',
 };
 
 const STATUS_LABELS: Record<string, string> = {
