@@ -1,55 +1,22 @@
-"""Заглушки для эндпоинтов, которые фронт вызывает при VITE_MOCK=false. Возвращают пустые/дефолтные данные."""
+"""Контрагенты и документы — полноценные эндпоинты с хранением в PostgreSQL."""
 from datetime import datetime
+from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 from app.dependencies import get_current_user, require_admin
+from app.database import get_db
 from app import models
 from pydantic import BaseModel
 from typing import Any
 
-router = APIRouter(tags=["stubs"])
-
-# --- In-memory хранилища (для режима без полного бэкенда) ---
-_counterparties_store: list[dict[str, Any]] = []
-_counterparty_next_id = 1
+router = APIRouter(tags=["counterparties_documents"])
 
 
-# --- Counterparties / Documents ---
+# ──────────────────────────────────────────────
+# Pydantic schemas
+# ──────────────────────────────────────────────
 
-def _counterparty_to_response(c: dict) -> dict:
-    return {
-        "id": c["id"],
-        "org_type": c.get("org_type", "legal"),
-        "name": c.get("name", ""),
-        "comment": c.get("comment", ""),
-        "inn": c.get("inn", ""),
-        "kpp": c.get("kpp", ""),
-        "address": c.get("address", ""),
-        "ogrn": c.get("ogrn", ""),
-        "ogrn_date": c.get("ogrn_date", ""),
-        "director_title": c.get("director_title", ""),
-        "director_name": c.get("director_name", ""),
-        "chief_accountant": c.get("chief_accountant", ""),
-        "phone": c.get("phone", ""),
-        "email": c.get("email", ""),
-        "website": c.get("website", ""),
-        "edo_operator": c.get("edo_operator", "none"),
-        "bank_account": c.get("bank_account", ""),
-        "personal_account": c.get("personal_account", ""),
-        "bik": c.get("bik", ""),
-        "bank_name": c.get("bank_name", ""),
-        "corr_account": c.get("corr_account", ""),
-        "bank_address": c.get("bank_address", ""),
-        "receiver_type": c.get("receiver_type", "buyer"),
-        "receiver_title": c.get("receiver_title", ""),
-        "receiver_name": c.get("receiver_name", ""),
-        "responsible_title": c.get("responsible_title", ""),
-        "responsible_name": c.get("responsible_name", ""),
-        "economic_entity": c.get("economic_entity", ""),
-        "created_at": c.get("created_at", datetime.utcnow().isoformat() + "Z"),
-    }
-
-
-class CounterpartyCreateStub(BaseModel):
+class CounterpartyCreateSchema(BaseModel):
     org_type: str = "legal"
     name: str = ""
     comment: str | None = None
@@ -79,124 +46,7 @@ class CounterpartyCreateStub(BaseModel):
     economic_entity: str | None = None
 
 
-@router.get("/counterparties")
-def get_counterparties_stub(
-    current_user: models.User = Depends(get_current_user),
-):
-    return [_counterparty_to_response(c) for c in _counterparties_store]
-
-
-@router.get("/counterparties/{counterparty_id}")
-def get_counterparty_stub(
-    counterparty_id: int,
-    current_user: models.User = Depends(get_current_user),
-):
-    for c in _counterparties_store:
-        if c["id"] == counterparty_id:
-            return _counterparty_to_response(c)
-    raise HTTPException(status_code=404, detail="Контрагент не найден")
-
-
-@router.post("/counterparties")
-def create_counterparty_stub(
-    data: CounterpartyCreateStub,
-    current_user: models.User = Depends(require_admin),
-):
-    global _counterparty_next_id
-    now = datetime.utcnow().isoformat() + "Z"
-    c = {
-        "id": _counterparty_next_id,
-        "org_type": data.org_type,
-        "name": data.name,
-        "comment": data.comment or "",
-        "inn": data.inn or "",
-        "kpp": data.kpp or "",
-        "address": data.address or "",
-        "ogrn": data.ogrn or "",
-        "ogrn_date": data.ogrn_date or "",
-        "director_title": data.director_title or "",
-        "director_name": data.director_name or "",
-        "chief_accountant": data.chief_accountant or "",
-        "phone": data.phone or "",
-        "email": data.email or "",
-        "website": data.website or "",
-        "edo_operator": data.edo_operator or "none",
-        "bank_account": data.bank_account or "",
-        "personal_account": data.personal_account or "",
-        "bik": data.bik or "",
-        "bank_name": data.bank_name or "",
-        "corr_account": data.corr_account or "",
-        "bank_address": data.bank_address or "",
-        "receiver_type": data.receiver_type or "buyer",
-        "receiver_title": data.receiver_title or "",
-        "receiver_name": data.receiver_name or "",
-        "responsible_title": data.responsible_title or "",
-        "responsible_name": data.responsible_name or "",
-        "economic_entity": data.economic_entity or "",
-        "created_at": now,
-    }
-    _counterparties_store.append(c)
-    _counterparty_next_id += 1
-    return _counterparty_to_response(c)
-
-
-@router.put("/counterparties/{counterparty_id}")
-def update_counterparty_stub(
-    counterparty_id: int,
-    data: CounterpartyCreateStub,
-    current_user: models.User = Depends(require_admin),
-):
-    for c in _counterparties_store:
-        if c["id"] == counterparty_id:
-            c["org_type"] = data.org_type
-            c["name"] = data.name
-            c["comment"] = data.comment or ""
-            c["inn"] = data.inn or ""
-            c["kpp"] = data.kpp or ""
-            c["address"] = data.address or ""
-            c["ogrn"] = data.ogrn or ""
-            c["ogrn_date"] = data.ogrn_date or ""
-            c["director_title"] = data.director_title or ""
-            c["director_name"] = data.director_name or ""
-            c["chief_accountant"] = data.chief_accountant or ""
-            c["phone"] = data.phone or ""
-            c["email"] = data.email or ""
-            c["website"] = data.website or ""
-            c["edo_operator"] = data.edo_operator or "none"
-            c["bank_account"] = data.bank_account or ""
-            c["personal_account"] = data.personal_account or ""
-            c["bik"] = data.bik or ""
-            c["bank_name"] = data.bank_name or ""
-            c["corr_account"] = data.corr_account or ""
-            c["bank_address"] = data.bank_address or ""
-            c["receiver_type"] = data.receiver_type or "buyer"
-            c["receiver_title"] = data.receiver_title or ""
-            c["receiver_name"] = data.receiver_name or ""
-            c["responsible_title"] = data.responsible_title or ""
-            c["responsible_name"] = data.responsible_name or ""
-            c["economic_entity"] = data.economic_entity or ""
-            return _counterparty_to_response(c)
-    raise HTTPException(status_code=404, detail="Контрагент не найден")
-
-
-@router.delete("/counterparties/{counterparty_id}", status_code=204)
-def delete_counterparty_stub(
-    counterparty_id: int,
-    current_user: models.User = Depends(require_admin),
-):
-    global _counterparties_store
-    for i, c in enumerate(_counterparties_store):
-        if c["id"] == counterparty_id:
-            _counterparties_store.pop(i)
-            return
-    raise HTTPException(status_code=404, detail="Контрагент не найден")
-
-
-_documents_store: list[dict[str, Any]] = []
-_document_next_id = 1
-
-
-class DocumentCreateStub(BaseModel):
+class DocumentCreateSchema(BaseModel):
     counterparty_id: int
     organization_id: int | None = None
     doc_type: str = "payment_invoice"
@@ -274,8 +124,77 @@ class DocumentCreateStub(BaseModel):
         extra = "allow"
 
 
-def _doc_to_response(d: dict) -> dict:
-    return d
+# ──────────────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────────────
+
+_CP_FIELDS = [
+    "org_type", "name", "comment", "inn", "kpp", "address", "ogrn", "ogrn_date",
+    "director_title", "director_name", "chief_accountant", "phone", "email",
+    "website", "edo_operator", "bank_account", "personal_account", "bik",
+    "bank_name", "corr_account", "bank_address", "receiver_type", "receiver_title",
+    "receiver_name", "responsible_title", "responsible_name", "economic_entity",
+]
+
+
+def _counterparty_to_response(c: models.Counterparty) -> dict:
+    return {
+        "id": c.id,
+        "org_type": c.org_type or "legal",
+        "name": c.name or "",
+        "comment": c.comment or "",
+        "inn": c.inn or "",
+        "kpp": c.kpp or "",
+        "address": c.address or "",
+        "ogrn": c.ogrn or "",
+        "ogrn_date": c.ogrn_date or "",
+        "director_title": c.director_title or "",
+        "director_name": c.director_name or "",
+        "chief_accountant": c.chief_accountant or "",
+        "phone": c.phone or "",
+        "email": c.email or "",
+        "website": c.website or "",
+        "edo_operator": c.edo_operator or "none",
+        "bank_account": c.bank_account or "",
+        "personal_account": c.personal_account or "",
+        "bik": c.bik or "",
+        "bank_name": c.bank_name or "",
+        "corr_account": c.corr_account or "",
+        "bank_address": c.bank_address or "",
+        "receiver_type": c.receiver_type or "buyer",
+        "receiver_title": c.receiver_title or "",
+        "receiver_name": c.receiver_name or "",
+        "responsible_title": c.responsible_title or "",
+        "responsible_name": c.responsible_name or "",
+        "economic_entity": c.economic_entity or "",
+        "created_at": c.created_at.isoformat() if c.created_at else "",
+    }
+
+
+# All CpDocument column names that can be set from the request
+_DOC_SIMPLE_FIELDS = [
+    "organization_id", "doc_type", "number", "date", "basis", "notes", "taxation",
+    "investor_id", "construction_name", "construction_address", "object_name", "okdp",
+    "contract_number", "contract_date", "operation_type", "estimated_cost",
+    "period_from", "period_to", "print_vat_amounts",
+    "contract_creation_date", "contract_location", "premises_area", "premises_address",
+    "transfer_date_from", "premises_condition",
+    "valid_until", "goods_source", "person_name_dative",
+    "passport_series", "passport_number", "passport_issued_by", "passport_issue_date",
+    "consumer_type", "payer_type",
+    "text_above", "text_below",
+    "payment_purpose", "delivery_address", "contract_text", "add_buyer_signature",
+    "correction_number", "correction_date", "advance_invoice",
+    "payment_doc_number", "payment_doc_date",
+    "shipment_doc_name", "shipment_doc_number", "shipment_doc_date",
+    "had_advance_invoices", "state_contract_id", "currency", "form_version",
+    "shipper_type", "consignee_type",
+    "torg12_form_version", "torg12_supplier_type", "torg12_consignee_type",
+    "basis_number", "basis_date", "basis_number2", "basis_date2",
+    "transport_waybill_name", "transport_waybill_number", "transport_waybill_date",
+    "attachment_sheets", "shipment_date_matches_doc", "shipment_date",
+    "add_discount_markup", "ks3_reporting_period_from", "ks3_reporting_period_to",
+]
 
 
 def _calc_total(items: list[dict[str, Any]] | None) -> float:
@@ -289,72 +208,213 @@ def _calc_total(items: list[dict[str, Any]] | None) -> float:
     return total
 
 
+def _doc_to_response(d: models.CpDocument) -> dict:
+    result: dict[str, Any] = {
+        "id": d.id,
+        "counterparty_id": d.counterparty_id,
+        "organization_id": d.organization_id,
+        "doc_type": d.doc_type or "payment_invoice",
+        "number": d.number or "",
+        "date": d.date or "",
+        "basis": d.basis or "",
+        "items": d.items if d.items is not None else [],
+        "notes": d.notes or "",
+        "taxation": d.taxation,
+        "total": float(d.total) if d.total is not None else 0,
+        "created_at": d.created_at.isoformat() if d.created_at else "",
+    }
+    for f in _DOC_SIMPLE_FIELDS:
+        if f not in result:
+            val = getattr(d, f, None)
+            if isinstance(val, Decimal):
+                val = float(val)
+            result[f] = val
+    return result
+
+
+# ──────────────────────────────────────────────
+# Counterparties CRUD
+# ──────────────────────────────────────────────
+
+@router.get("/counterparties")
+def get_counterparties(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    rows = db.query(models.Counterparty).filter(
+        models.Counterparty.portal_id == current_user.portal_id
+    ).order_by(models.Counterparty.id).all()
+    return [_counterparty_to_response(c) for c in rows]
+
+
+@router.get("/counterparties/{counterparty_id}")
+def get_counterparty(
+    counterparty_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    c = db.query(models.Counterparty).filter(
+        models.Counterparty.id == counterparty_id,
+        models.Counterparty.portal_id == current_user.portal_id,
+    ).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Контрагент не найден")
+    return _counterparty_to_response(c)
+
+
+@router.post("/counterparties")
+def create_counterparty(
+    data: CounterpartyCreateSchema,
+    current_user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    c = models.Counterparty(portal_id=current_user.portal_id)
+    for field in _CP_FIELDS:
+        val = getattr(data, field, None)
+        if val is not None:
+            setattr(c, field, val)
+        elif field == "org_type":
+            c.org_type = "legal"
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    return _counterparty_to_response(c)
+
+
+@router.put("/counterparties/{counterparty_id}")
+def update_counterparty(
+    counterparty_id: int,
+    data: CounterpartyCreateSchema,
+    current_user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    c = db.query(models.Counterparty).filter(
+        models.Counterparty.id == counterparty_id,
+        models.Counterparty.portal_id == current_user.portal_id,
+    ).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Контрагент не найден")
+    for field in _CP_FIELDS:
+        val = getattr(data, field, None)
+        setattr(c, field, val if val is not None else getattr(c, field))
+    db.commit()
+    db.refresh(c)
+    return _counterparty_to_response(c)
+
+
+@router.delete("/counterparties/{counterparty_id}", status_code=204)
+def delete_counterparty(
+    counterparty_id: int,
+    current_user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    c = db.query(models.Counterparty).filter(
+        models.Counterparty.id == counterparty_id,
+        models.Counterparty.portal_id == current_user.portal_id,
+    ).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Контрагент не найден")
+    db.delete(c)
+    db.commit()
+    return None
+
+
+# ──────────────────────────────────────────────
+# Documents CRUD
+# ──────────────────────────────────────────────
+
 @router.get("/documents")
-def get_documents_stub(
+def get_documents(
     counterparty_id: int | None = None,
     current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
+    q = db.query(models.CpDocument).filter(
+        models.CpDocument.portal_id == current_user.portal_id
+    )
     if counterparty_id is not None:
-        return [_doc_to_response(d) for d in _documents_store if d.get("counterparty_id") == counterparty_id]
-    return [_doc_to_response(d) for d in _documents_store]
+        q = q.filter(models.CpDocument.counterparty_id == counterparty_id)
+    rows = q.order_by(models.CpDocument.id.desc()).all()
+    return [_doc_to_response(d) for d in rows]
 
 
 @router.get("/documents/{document_id}")
-def get_document_stub(
+def get_document(
     document_id: int,
     current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    for d in _documents_store:
-        if d["id"] == document_id:
-            return _doc_to_response(d)
-    raise HTTPException(status_code=404, detail="Документ не найден")
+    d = db.query(models.CpDocument).filter(
+        models.CpDocument.id == document_id,
+        models.CpDocument.portal_id == current_user.portal_id,
+    ).first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    return _doc_to_response(d)
 
 
 @router.post("/documents")
-def create_document_stub(
-    data: DocumentCreateStub,
+def create_document(
+    data: DocumentCreateSchema,
     current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    global _document_next_id
-    now = datetime.utcnow().isoformat() + "Z"
-    raw = data.model_dump()
-    items = raw.get("items") or []
-    doc = {
-        **raw,
-        "id": _document_next_id,
-        "items": items,
-        "total": _calc_total(items),
-        "created_at": now,
-    }
-    _documents_store.append(doc)
-    _document_next_id += 1
-    return _doc_to_response(doc)
+    items = data.items or []
+    d = models.CpDocument(
+        portal_id=current_user.portal_id,
+        counterparty_id=data.counterparty_id,
+        items=items,
+        total=_calc_total(items),
+    )
+    raw = data.model_dump(exclude={"counterparty_id", "items"})
+    for field in _DOC_SIMPLE_FIELDS:
+        if field in raw and raw[field] is not None:
+            setattr(d, field, raw[field])
+    db.add(d)
+    db.commit()
+    db.refresh(d)
+    return _doc_to_response(d)
 
 
 @router.put("/documents/{document_id}")
-def update_document_stub(
+def update_document(
     document_id: int,
-    data: DocumentCreateStub,
+    data: DocumentCreateSchema,
     current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    for d in _documents_store:
-        if d["id"] == document_id:
-            raw = data.model_dump(exclude_unset=True)
-            d.update(raw)
-            if "items" in raw:
-                d["total"] = _calc_total(d.get("items"))
-            return _doc_to_response(d)
-    raise HTTPException(status_code=404, detail="Документ не найден")
+    d = db.query(models.CpDocument).filter(
+        models.CpDocument.id == document_id,
+        models.CpDocument.portal_id == current_user.portal_id,
+    ).first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    raw = data.model_dump(exclude_unset=True)
+    if "items" in raw:
+        d.items = raw["items"] or []
+        d.total = _calc_total(d.items)
+    if "counterparty_id" in raw:
+        d.counterparty_id = raw["counterparty_id"]
+    for field in _DOC_SIMPLE_FIELDS:
+        if field in raw:
+            setattr(d, field, raw[field])
+    db.commit()
+    db.refresh(d)
+    return _doc_to_response(d)
 
 
 @router.delete("/documents/{document_id}", status_code=204)
-def delete_document_stub(
+def delete_document(
     document_id: int,
     current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    global _documents_store
-    for i, d in enumerate(_documents_store):
-        if d["id"] == document_id:
-            _documents_store.pop(i)
-            return
-    raise HTTPException(status_code=404, detail="Документ не найден")
+    d = db.query(models.CpDocument).filter(
+        models.CpDocument.id == document_id,
+        models.CpDocument.portal_id == current_user.portal_id,
+    ).first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    db.delete(d)
+    db.commit()
+    return None

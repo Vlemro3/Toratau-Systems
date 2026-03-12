@@ -176,6 +176,8 @@ def delete_portal(
     if not portal:
         raise HTTPException(status_code=404, detail="Портал не найден")
     # Delete related entities that may not have CASCADE in FK
+    db.query(models.CpDocument).filter(models.CpDocument.portal_id == portal.id).delete()
+    db.query(models.Counterparty).filter(models.Counterparty.portal_id == portal.id).delete()
     db.query(models.AuditLog).filter(models.AuditLog.portal_id == portal.id).delete()
     db.query(models.CustomExpenseCategory).filter(models.CustomExpenseCategory.portal_id == portal.id).delete()
     db.query(models.Organization).filter(models.Organization.portal_id == portal.id).delete()
