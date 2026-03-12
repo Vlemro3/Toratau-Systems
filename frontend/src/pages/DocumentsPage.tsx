@@ -304,16 +304,9 @@ export function DocumentsPage() {
       <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileChange} />
 
       {/* Search */}
-      <div style={{ position: 'relative', marginBottom: 16, maxWidth: 480 }}>
-        <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }}><IconSearch /></span>
-        <input
-          type="text"
-          className="input"
-          placeholder="Поиск по контрагенту, типу документа, номеру..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ paddingLeft: 40, fontSize: 14 }}
-        />
+      <div className="data-table__search" style={{ marginBottom: 16 }}>
+        <input type="text" placeholder="Поиск..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        {search && <button className="data-table__search-clear" onClick={() => setSearch('')} title="Очистить">&times;</button>}
       </div>
 
       {/* Tabs */}
