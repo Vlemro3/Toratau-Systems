@@ -50,8 +50,6 @@ export function PayoutFormPage() {
             payment_method: p.payment_method,
             comment: p.comment || '',
           });
-        } else if (active.length > 0) {
-          setForm((prev) => ({ ...prev, crew_id: active[0].id }));
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Ошибка загрузки');

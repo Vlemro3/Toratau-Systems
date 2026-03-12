@@ -62,12 +62,6 @@ export function WorkLogFormPage() {
             accrued_amount: wl.accrued_amount,
             comment: wl.comment || '',
           });
-        } else {
-          setForm((prev) => ({
-            ...prev,
-            work_type_id: activeWts[0]?.id || 0,
-            crew_id: activeCrs[0]?.id || 0,
-          }));
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Ошибка загрузки');
