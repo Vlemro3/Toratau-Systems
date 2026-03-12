@@ -194,18 +194,13 @@ export function EstimateManualCreatePage() {
     setSaving(true);
     setError('');
     try {
+      const normalizedPositions = filled.map((p, i) => ({ ...p, id: i + 1, num: String(i + 1) }));
       const est = await createEstimate(
         { name: name.trim(), region, baseType: 'FER', fileName: 'Ручной ввод' },
         undefined,
         undefined,
+        normalizedPositions,
       );
-      const all = JSON.parse(localStorage.getItem('estimates') || '[]');
-      const idx = all.findIndex((x: { id: number }) => x.id === est.id);
-      if (idx >= 0) {
-        all[idx].positions = filled.map((p, i) => ({ ...p, id: i + 1, num: String(i + 1) }));
-        all[idx].status = 'parsed';
-        localStorage.setItem('estimates', JSON.stringify(all));
-      }
       navigate(`/estimates/${est.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка');

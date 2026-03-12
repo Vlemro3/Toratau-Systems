@@ -167,19 +167,34 @@ const DEMO_ERRORS: EstimateError[] = [
   { positionNum: '7', type: 'overpriced', description: 'Монтаж — 28 000 ₽/т, рыночный уровень 22 000–24 000 ₽/т', recommendation: 'Завышение ~20%, рекомендуется пересмотр' },
 ];
 
-const LS_KEY = 'toratau_estimates';
+const LS_KEY_PREFIX = 'toratau_estimates';
 let nextEstId = 10;
+
+function _getPortalId(): string {
+  try {
+    const raw = localStorage.getItem('user');
+    if (raw) {
+      const u = JSON.parse(raw);
+      if (u.portal_id) return String(u.portal_id);
+    }
+  } catch { /* ignore */ }
+  return 'default';
+}
+
+function _lsKey(): string {
+  return `${LS_KEY_PREFIX}_${_getPortalId()}`;
+}
 
 function loadEstimates(): Estimate[] {
   try {
-    const raw = localStorage.getItem(LS_KEY);
+    const raw = localStorage.getItem(_lsKey());
     if (raw) return JSON.parse(raw);
   } catch { /* ignore */ }
   return createDemoEstimates();
 }
 
 function saveEstimates(data: Estimate[]) {
-  localStorage.setItem(LS_KEY, JSON.stringify(data));
+  localStorage.setItem(_lsKey(), JSON.stringify(data));
 }
 
 function createDemoEstimates(): Estimate[] {
@@ -231,9 +246,11 @@ export async function getEstimate(id: number): Promise<Estimate> {
   return est;
 }
 
-export async function createEstimate(data: EstimateCreate, file?: File, fileContentBase64?: string): Promise<Estimate> {
+export async function createEstimate(data: EstimateCreate, file?: File, fileContentBase64?: string, initialPositions?: EstimatePosition[]): Promise<Estimate> {
   let positions: EstimatePosition[];
-  if (file) {
+  if (initialPositions && initialPositions.length > 0) {
+    positions = initialPositions;
+  } else if (file) {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('base_type', data.baseType);
@@ -382,7 +399,7 @@ export async function updateEstimateCompare(id: number, compare: CompareResult):
 export async function getEstimateSettings(): Promise<EstimateSettings> {
   await delay();
   try {
-    const raw = localStorage.getItem('toratau_estimate_settings');
+    const raw = localStorage.getItem(`toratau_estimate_settings_${_getPortalId()}`);
     if (raw) return JSON.parse(raw);
   } catch { /* ignore */ }
   return { regionCoefficients: { 'Республика Башкортостан': 1.0, 'Москва': 1.35, 'Санкт-Петербург': 1.2, 'Краснодарский край': 1.05 }, overheadPct: 10, profitPct: 8, strategy: 'standard', customMarginPct: 15 };
@@ -390,7 +407,7 @@ export async function getEstimateSettings(): Promise<EstimateSettings> {
 
 export async function saveEstimateSettings(s: EstimateSettings): Promise<void> {
   await delay();
-  localStorage.setItem('toratau_estimate_settings', JSON.stringify(s));
+  localStorage.setItem(`toratau_estimate_settings_${_getPortalId()}`, JSON.stringify(s));
 }
 
 /* ---- Утилиты ---- */
