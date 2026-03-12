@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, type SetStateAction } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
-  getEstimate, runCheck, generateLSR, runCompare, updateEstimateLSR,
+  getEstimate, generateLSR, runCompare, updateEstimateLSR,
   updateEstimatePositions, updateEstimateCompare, normalizeCompareResult,
   downloadEstimatePositions, downloadLSRWithResult, downloadCompare,
   STATUS_LABELS, STATUS_COLORS,
@@ -17,7 +17,7 @@ function formatMoney(n: number): string {
   return n.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' ₽';
 }
 
-type Tab = 'positions' | 'check' | 'lsr' | 'compare';
+type Tab = 'positions' | 'lsr' | 'compare';
 
 export function EstimateViewPage() {
   const { id } = useParams<{ id: string }>();
@@ -65,14 +65,6 @@ export function EstimateViewPage() {
   const setLsrPositionsForTab = useCallback((action: SetStateAction<LSRPosition[]>) => {
     setLsrPositions((prev) => (typeof action === 'function' ? action(prev ?? []) : action));
   }, []);
-
-  const handleCheck = async () => {
-    setProcessing('Проверяем расчёт...');
-    await runCheck(estId);
-    await load();
-    setProcessing('');
-    setTab('check');
-  };
 
   const handleLSR = async () => {
     setProcessing('Формируем ЛСР...');
@@ -155,7 +147,6 @@ export function EstimateViewPage() {
 
   const tabs: { key: Tab; label: string; disabled?: boolean }[] = [
     { key: 'positions', label: 'Позиции' },
-    { key: 'check', label: 'Проверка', disabled: !est.checkResult },
     { key: 'lsr', label: 'ЛСР', disabled: !est.lsr },
     { key: 'compare', label: 'Сравнение', disabled: !est.compare },
   ];
@@ -182,9 +173,6 @@ export function EstimateViewPage() {
 
       {/* Кнопки действий */}
       <div className="dash-quick-actions" style={{ marginBottom: 16 }}>
-        <button className="btn btn--primary btn--sm" onClick={handleCheck} disabled={!!processing}>
-          Проверить расчёт
-        </button>
         <button className="btn btn--primary btn--sm" onClick={handleLSR} disabled={!!processing}>
           Сформировать ЛСР
         </button>
@@ -262,7 +250,6 @@ export function EstimateViewPage() {
           />
         </>
       )}
-      {tab === 'check' && est.checkResult && <CheckTab est={est} />}
       {tab === 'lsr' && est.lsr && (
         <>
           <LSRTab
@@ -421,65 +408,6 @@ function PositionsTab({
               <td colSpan={2} />
             </tr>
           </tfoot>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-/* ==== Вкладка «Проверка» ==== */
-import { RISK_LABELS, RISK_COLORS, ERROR_TYPE_LABELS } from '../../api/estimates';
-
-function CheckTab({ est }: { est: Estimate }) {
-  const r = est.checkResult!;
-  return (
-    <div>
-      {/* Резюме */}
-      <div className="dash-kpis" style={{ marginBottom: 20 }}>
-        <div className="dash-kpi"><div className="dash-kpi__icon">💰</div><div className="dash-kpi__body"><div className="dash-kpi__value">{formatMoney(r.totalSum)}</div><div className="dash-kpi__label">Сумма сметы</div></div></div>
-        <div className="dash-kpi"><div className="dash-kpi__icon">📊</div><div className="dash-kpi__body"><div className="dash-kpi__value">{formatMoney(r.marketEstimate)}</div><div className="dash-kpi__label">Рыночная оценка</div></div></div>
-        <div className="dash-kpi dash-kpi--danger"><div className="dash-kpi__icon">⚠️</div><div className="dash-kpi__body"><div className="dash-kpi__value">{formatMoney(r.potentialOverprice)} ({r.potentialOverpricePct}%)</div><div className="dash-kpi__label">Потенциальное завышение</div></div></div>
-        <div className="dash-kpi"><div className="dash-kpi__icon">🐛</div><div className="dash-kpi__body"><div className="dash-kpi__value">{r.errorsCount}</div><div className="dash-kpi__label">Найдено ошибок</div></div></div>
-      </div>
-      <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontWeight: 600 }}>Уровень риска:</span>
-        <span style={{ background: RISK_COLORS[r.riskLevel], color: '#fff', padding: '4px 12px', borderRadius: 12, fontWeight: 600, fontSize: '0.875rem' }}>
-          {RISK_LABELS[r.riskLevel]}
-        </span>
-      </div>
-
-      {/* Таблица ошибок */}
-      <h3 style={{ marginBottom: 12 }}>Найденные ошибки и замечания</h3>
-      <div className="table-wrap">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Позиция</th>
-              <th>Тип ошибки</th>
-              <th>Описание</th>
-              <th>Рекомендация</th>
-            </tr>
-          </thead>
-          <tbody>
-            {r.errors.map((err, i) => {
-              const typeColors: Record<string, string> = {
-                arithmetic: '#3b82f6', wrong_norm: '#dc2626', wrong_unit: '#f59e0b',
-                overpriced: '#dc2626', suspicious_coeff: '#f97316',
-              };
-              return (
-                <tr key={i}>
-                  <td style={{ fontWeight: 600 }}>№{err.positionNum}</td>
-                  <td>
-                    <span style={{ background: typeColors[err.type] || '#6b7280', color: '#fff', padding: '2px 8px', borderRadius: 8, fontSize: '0.8rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                      {ERROR_TYPE_LABELS[err.type]}
-                    </span>
-                  </td>
-                  <td style={{ fontSize: '0.875rem' }}>{err.description}</td>
-                  <td className="text-muted" style={{ fontSize: '0.875rem' }}>{err.recommendation}</td>
-                </tr>
-              );
-            })}
-          </tbody>
         </table>
       </div>
     </div>

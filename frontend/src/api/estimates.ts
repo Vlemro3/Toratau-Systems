@@ -9,9 +9,7 @@ import { api } from './client';
 /* ---- Типы ---- */
 
 export type EstimateBaseType = 'FER' | 'TER' | 'GESN';
-export type EstimateStatus = 'draft' | 'parsed' | 'checked' | 'lsr_ready' | 'compared';
-export type ErrorSeverity = 'arithmetic' | 'wrong_norm' | 'wrong_unit' | 'overpriced' | 'suspicious_coeff';
-export type RiskLevel = 'low' | 'medium' | 'high';
+export type EstimateStatus = 'draft' | 'parsed' | 'lsr_ready' | 'compared';
 export type CalcStrategy = 'standard' | 'aggressive' | 'conservative' | 'custom';
 
 export interface EstimatePosition {
@@ -33,23 +31,6 @@ export interface EstimatePosition {
   laborPersonHours?: number;
   /** Стоим. ед. с нач., руб. */
   costPerUnitFromStart?: number;
-}
-
-export interface EstimateError {
-  positionNum: string;
-  type: ErrorSeverity;
-  description: string;
-  recommendation: string;
-}
-
-export interface CheckResult {
-  totalSum: number;
-  marketEstimate: number;
-  potentialOverprice: number;
-  potentialOverpricePct: number;
-  errorsCount: number;
-  riskLevel: RiskLevel;
-  errors: EstimateError[];
 }
 
 export interface LSRPosition {
@@ -123,7 +104,6 @@ export interface Estimate {
   status: EstimateStatus;
   createdAt: string;
   positions: EstimatePosition[];
-  checkResult: CheckResult | null;
   lsr: LSRResult | null;
   compare: CompareResult | null;
   strategy: CalcStrategy;
@@ -159,14 +139,6 @@ const DEMO_POSITIONS: EstimatePosition[] = [
   { id: 8, num: '8', normCode: 'ФЕР 16-01-001-01', name: 'Устройство электропроводки', unit: 'м', volume: 2500, price: 320, total: 800000, overhead: 80000, profit: 64000 },
 ];
 
-const DEMO_ERRORS: EstimateError[] = [
-  { positionNum: '1', type: 'overpriced', description: 'Расценка на 18% выше рыночной (3 810 ₽/м³)', recommendation: 'Уточнить у заказчика или скорректировать до рыночного уровня' },
-  { positionNum: '3', type: 'arithmetic', description: 'Итого не совпадает: 450 × 1800 = 810 000, указано 810 000 — ОК. Ошибка в НР: 10% от 810 000 = 81 000, указано 81 000 — ОК. СП: 8% = 64 800, указано 64 800 — ОК', recommendation: 'Перепроверить вручную' },
-  { positionNum: '4', type: 'suspicious_coeff', description: 'Применён коэффициент 1.15 — нетипичен для данного региона', recommendation: 'Проверить обоснование коэффициента в пояснительной записке' },
-  { positionNum: '6', type: 'wrong_unit', description: 'Единица «м²» — допустимо, но в ГЭСН для данной нормы используется «100 м²»', recommendation: 'Привести к стандартной единице измерения по базе' },
-  { positionNum: '7', type: 'overpriced', description: 'Монтаж — 28 000 ₽/т, рыночный уровень 22 000–24 000 ₽/т', recommendation: 'Завышение ~20%, рекомендуется пересмотр' },
-];
-
 const LS_KEY_PREFIX = 'toratau_estimates';
 let nextEstId = 10;
 
@@ -198,7 +170,6 @@ function saveEstimates(data: Estimate[]) {
 }
 
 function createDemoEstimates(): Estimate[] {
-  const totalSum = DEMO_POSITIONS.reduce((s, p) => s + p.total + p.overhead + p.profit, 0);
   const demo: Estimate[] = [
     {
       id: 1,
@@ -206,18 +177,9 @@ function createDemoEstimates(): Estimate[] {
       region: 'Республика Башкортостан',
       baseType: 'FER',
       fileName: 'smeta_solnechniy.xlsx',
-      status: 'checked',
+      status: 'parsed',
       createdAt: '2026-02-15T10:00:00Z',
       positions: DEMO_POSITIONS,
-      checkResult: {
-        totalSum,
-        marketEstimate: totalSum * 0.88,
-        potentialOverprice: totalSum * 0.12,
-        potentialOverpricePct: 12,
-        errorsCount: DEMO_ERRORS.length,
-        riskLevel: 'medium',
-        errors: DEMO_ERRORS,
-      },
       lsr: null,
       compare: null,
       strategy: 'standard',
@@ -286,7 +248,6 @@ export async function createEstimate(data: EstimateCreate, file?: File, fileCont
     status: 'parsed',
     createdAt: new Date().toISOString(),
     positions,
-    checkResult: null,
     lsr: null,
     compare: null,
     strategy: 'standard',
@@ -301,21 +262,6 @@ export async function deleteEstimate(id: number): Promise<void> {
   await delay();
   const all = loadEstimates().filter((e) => e.id !== id);
   saveEstimates(all);
-}
-
-export async function runCheck(id: number): Promise<CheckResult> {
-  const all = loadEstimates();
-  const est = all.find((e) => e.id === id);
-  if (!est) throw new Error('Смета не найдена');
-
-  const result = await api.post<CheckResult>('/estimates/check', {
-    positions: est.positions,
-    region: est.region,
-  });
-  est.checkResult = result;
-  est.status = 'checked';
-  saveEstimates(all);
-  return result;
 }
 
 export async function generateLSR(id: number): Promise<LSRResult> {
@@ -358,7 +304,7 @@ export async function setStrategy(id: number, strategy: CalcStrategy): Promise<v
   est.strategy = strategy;
   est.lsr = null;
   est.compare = null;
-  if (est.status === 'lsr_ready' || est.status === 'compared') est.status = 'checked';
+  if (est.status === 'lsr_ready' || est.status === 'compared') est.status = 'parsed';
   saveEstimates(all);
 }
 
@@ -379,7 +325,6 @@ export async function updateEstimatePositions(id: number, positions: EstimatePos
   const est = all.find((e) => e.id === id);
   if (!est) throw new Error('Смета не найдена');
   est.positions = positions;
-  est.checkResult = null;
   est.lsr = null;
   est.compare = null;
   if (est.status !== 'parsed' && est.status !== 'draft') est.status = 'parsed';
@@ -453,17 +398,11 @@ export const REGIONS = [
 /** Регионы в алфавитном порядке для отображения в формах */
 export const REGIONS_SORTED = [...REGIONS].sort((a, b) => a.localeCompare(b, 'ru'));
 
-export const RISK_LABELS: Record<RiskLevel, string> = { low: 'Низкий', medium: 'Средний', high: 'Высокий' };
-export const RISK_COLORS: Record<RiskLevel, string> = { low: '#16a34a', medium: '#eab308', high: '#dc2626' };
-export const ERROR_TYPE_LABELS: Record<ErrorSeverity, string> = {
-  arithmetic: 'Арифметическая', wrong_norm: 'Неверная норма', wrong_unit: 'Некорректная единица',
-  overpriced: 'Завышенная расценка', suspicious_coeff: 'Подозрительный коэф.',
-};
 export const STATUS_LABELS: Record<EstimateStatus, string> = {
-  draft: 'Черновик', parsed: 'Загружена', checked: 'Проверена', lsr_ready: 'ЛСР готов', compared: 'Сравнение готово',
+  draft: 'Черновик', parsed: 'Загружена', lsr_ready: 'ЛСР готов', compared: 'Сравнение готово',
 };
 export const STATUS_COLORS: Record<EstimateStatus, string> = {
-  draft: '#6b7280', parsed: '#3b82f6', checked: '#f59e0b', lsr_ready: '#8b5cf6', compared: '#16a34a',
+  draft: '#6b7280', parsed: '#3b82f6', lsr_ready: '#8b5cf6', compared: '#16a34a',
 };
 export const STRATEGY_LABELS: Record<CalcStrategy, string> = {
   standard: 'Стандарт', aggressive: 'Агрессивная маржа', conservative: 'Консервативная', custom: 'Свой шаблон',

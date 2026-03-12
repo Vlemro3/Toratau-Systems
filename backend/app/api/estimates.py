@@ -1,5 +1,5 @@
 """
-API смет: чтение файла (.xls, .xlsx, .xml), проверка (Claude), ЛСР и сравнение (локальные расчёты).
+API смет: чтение файла (.xls, .xlsx, .xml), ЛСР и сравнение (локальные расчёты).
 Парсинг файлов — прямое чтение без нейросети (estimate_file_parser).
 """
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
@@ -8,14 +8,8 @@ from pydantic import BaseModel
 from app.dependencies import require_admin
 from app import models
 from app.services.estimate_file_parser import parse_estimate_file
-from app.services.openai_estimates import check_estimate
 
 router = APIRouter(prefix="/estimates", tags=["estimates"])
-
-
-class CheckRequest(BaseModel):
-    positions: list[dict]
-    region: str = ""
 
 
 class LSRRequest(BaseModel):
@@ -138,21 +132,6 @@ async def parse_file(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка чтения файла: {e}")
-
-
-@router.post("/check")
-async def check(
-    body: CheckRequest,
-    current_user: models.User = Depends(require_admin),
-):
-    """Проверка сметы по позициям (Claude AI)."""
-    try:
-        result = check_estimate(body.positions, body.region)
-        return result
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Ошибка проверки: {e}")
 
 
 @router.post("/lsr")
