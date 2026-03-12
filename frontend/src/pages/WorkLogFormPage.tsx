@@ -5,7 +5,7 @@ import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { createWorkLog, getWorkLog, updateWorkLog, uploadWorkLogPhotos } from '../api/workLogs';
 import { getWorkTypes, createWorkType } from '../api/workTypes';
-import { getCrews } from '../api/crews';
+import { getCrews, createCrew } from '../api/crews';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { FileUpload } from '../components/FileUpload';
 import { formatMoney, todayISO } from '../utils/format';
@@ -26,6 +26,9 @@ export function WorkLogFormPage() {
   const [showNewRate, setShowNewRate] = useState(false);
   const [newRateForm, setNewRateForm] = useState({ name: '', unit: '', rate: 0, category: '' });
   const [savingRate, setSavingRate] = useState(false);
+  const [showNewCrew, setShowNewCrew] = useState(false);
+  const [newCrewForm, setNewCrewForm] = useState({ name: '', contact: '', phone: '' });
+  const [savingCrew, setSavingCrew] = useState(false);
 
   const [form, setForm] = useState<WorkLogCreate>({
     project_id: projId,
@@ -80,6 +83,11 @@ export function WorkLogFormPage() {
       setNewRateForm({ name: '', unit: '', rate: 0, category: '' });
       return;
     }
+    if (name === 'crew_id' && value === '__new__') {
+      setShowNewCrew(true);
+      setNewCrewForm({ name: '', contact: '', phone: '' });
+      return;
+    }
     const isNumeric = type === 'number' || name.endsWith('_id') || name === 'volume' || name === 'accrued_amount';
     setForm((prev) => ({
       ...prev,
@@ -105,6 +113,21 @@ export function WorkLogFormPage() {
       setError(err instanceof Error ? err.message : 'Ошибка создания расценки');
     } finally {
       setSavingRate(false);
+    }
+  };
+
+  const handleCreateCrew = async () => {
+    if (!newCrewForm.name.trim()) return;
+    setSavingCrew(true);
+    try {
+      const created = await createCrew({ name: newCrewForm.name.trim(), contact: newCrewForm.contact.trim(), phone: newCrewForm.phone.trim() || undefined, is_active: true });
+      setCrews((prev) => [...prev, created]);
+      setForm((prev) => ({ ...prev, crew_id: created.id }));
+      setShowNewCrew(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка создания контакта');
+    } finally {
+      setSavingCrew(false);
     }
   };
 
@@ -156,6 +179,7 @@ export function WorkLogFormPage() {
           <select name="crew_id" value={form.crew_id} onChange={handleChange}>
             <option value={0} disabled>— Выберите бригаду —</option>
             {crews.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+            <option value="__new__">+ Добавить контакт...</option>
           </select>
         </div>
 
@@ -196,6 +220,43 @@ export function WorkLogFormPage() {
           </div>
         </div>
       </form>
+
+      {showNewCrew && (
+        <div
+          onClick={() => setShowNewCrew(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 16, maxWidth: 440, width: '100%', boxShadow: '0 24px 80px rgba(0,0,0,0.18)', overflow: 'hidden' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px 0' }}>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Новый контакт подрядчика</h3>
+              <button type="button" onClick={() => setShowNewCrew(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8', padding: 0, lineHeight: 1 }}>&times;</button>
+            </div>
+            <div style={{ padding: '16px 24px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div className="form-group">
+                <label className="form-label">Наименование *</label>
+                <input className="input" value={newCrewForm.name} onChange={(e) => setNewCrewForm((f) => ({ ...f, name: e.target.value }))} placeholder="ООО «Строитель» или ФИО" autoFocus />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Контактное лицо</label>
+                <input className="input" value={newCrewForm.contact} onChange={(e) => setNewCrewForm((f) => ({ ...f, contact: e.target.value }))} placeholder="Иванов Иван" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Телефон</label>
+                <input className="input" value={newCrewForm.phone} onChange={(e) => setNewCrewForm((f) => ({ ...f, phone: e.target.value }))} placeholder="+7 (999) 000-00-00" />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+                <button type="button" className="btn btn--secondary" onClick={() => setShowNewCrew(false)}>Отмена</button>
+                <button type="button" className="btn btn--primary" onClick={handleCreateCrew} disabled={savingCrew || !newCrewForm.name.trim()}>
+                  {savingCrew ? 'Создание...' : 'Создать'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showNewRate && (
         <div
