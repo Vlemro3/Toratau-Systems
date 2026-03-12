@@ -760,8 +760,7 @@ function LSRTab({
   );
 }
 
-/* ==== Вкладка «Сравнение» (редактируемая) ==== */
-const compareInputStyle = { width: 100, padding: '4px 6px', fontSize: '0.8125rem' };
+/* ==== Вкладка «Сравнение» (редактируемая, spreadsheet-стиль как ЛСР) ==== */
 
 function CompareTab({
   rows,
@@ -797,6 +796,20 @@ function CompareTab({
     [setRows, setDirty]
   );
 
+  const moveRow = useCallback(
+    (index: number, dir: -1 | 1) => {
+      setRows((prev) => {
+        const next = [...prev];
+        const j = index + dir;
+        if (j < 0 || j >= next.length) return prev;
+        [next[index], next[j]] = [next[j], next[index]];
+        return next.map((r, i) => ({ ...r, num: String(i + 1) }));
+      });
+      setDirty(true);
+    },
+    [setRows, setDirty]
+  );
+
   const deleteRow = useCallback(
     (index: number) => {
       if (!confirm('Удалить позицию из сравнения?')) return;
@@ -808,31 +821,40 @@ function CompareTab({
 
   return (
     <div>
-      <div className="dash-kpis" style={{ marginBottom: 20 }}>
+      <style>{spreadsheetStyles}{`
+.est-sheet .col-cmp-num { width: 36px; }
+.est-sheet .col-cmp-name { width: auto; min-width: 200px; }
+.est-sheet .col-cmp-sum { width: 110px; }
+.est-sheet .col-cmp-diff { width: 100px; }
+.est-sheet .col-cmp-pct { width: 70px; }
+.est-sheet .col-cmp-act { width: 68px; }
+.est-sheet td.est-cmp-ro { text-align: right; padding: 0 6px; font-size: 12px; font-weight: 600; }
+.est-sheet td.est-cmp-ro.text-success { color: #16a34a; }
+.est-sheet td.est-cmp-ro.text-danger { color: #dc2626; }
+.est-sheet td.est-cmp-actions { text-align: center; padding: 0 2px; white-space: nowrap; }
+.est-sheet td.est-cmp-actions button { background: none; border: none; cursor: pointer; padding: 0 2px; font-size: 12px; color: #94a3b8; line-height: 1; }
+.est-sheet td.est-cmp-actions button:hover { color: #3b82f6; }
+.est-sheet td.est-cmp-actions button.del:hover { color: #dc2626; }
+      `}</style>
+      <div className="dash-kpis" style={{ marginBottom: 12 }}>
         <div className="dash-kpi"><div className="dash-kpi__icon">📄</div><div className="dash-kpi__body"><div className="dash-kpi__value">{formatMoney(totalCustomer)}</div><div className="dash-kpi__label">Смета заказчика</div></div></div>
         <div className="dash-kpi"><div className="dash-kpi__icon">📐</div><div className="dash-kpi__body"><div className="dash-kpi__value">{formatMoney(totalOur)}</div><div className="dash-kpi__label">Наш ЛСР</div></div></div>
-        <div className="dash-kpi"><div className="dash-kpi__icon">📊</div><div className="dash-kpi__body"><div className="dash-kpi__value">{formatMoney(totalDiff)}</div><div className="dash-kpi__label">Общая разница</div></div></div>
-        <div className="dash-kpi"><div className="dash-kpi__icon">💹</div><div className="dash-kpi__body"><div className="dash-kpi__value">{marginality}%</div><div className="dash-kpi__label">Маржинальность</div></div></div>
+        <div className="dash-kpi"><div className="dash-kpi__icon">📊</div><div className="dash-kpi__body"><div className="dash-kpi__value">{totalDiff >= 0 ? '+' : ''}{formatMoney(totalDiff)}</div><div className="dash-kpi__label">Разница</div></div></div>
+        <div className="dash-kpi"><div className="dash-kpi__icon">💹</div><div className="dash-kpi__body"><div className="dash-kpi__value">{marginality >= 0 ? '+' : ''}{marginality}%</div><div className="dash-kpi__label">Маржинальность</div></div></div>
+        <div className="dash-kpi"><div className="dash-kpi__icon">💰</div><div className="dash-kpi__body"><div className="dash-kpi__value" style={{ color: possibleProfit >= 0 ? '#16a34a' : '#dc2626' }}>{possibleProfit >= 0 ? '+' : ''}{formatMoney(possibleProfit)}</div><div className="dash-kpi__label">Возможная прибыль</div></div></div>
       </div>
-      <div className="dash-cols" style={{ marginBottom: 20 }}>
-        <div className="dash-card">
-          <h3 className="dash-card__title">Итоги сравнения</h3>
-          <div style={{ fontSize: '0.875rem' }}>
-            <div className="summary-row"><span className="summary-row__label">Возможная прибыль</span><span className={`summary-row__value text-bold ${possibleProfit >= 0 ? 'text-success' : 'text-danger'}`}>{formatMoney(possibleProfit)}</span></div>
-          </div>
-        </div>
-      </div>
-      <div className="table-wrap">
-        <table className="table">
+
+      <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 320px)', border: '1px solid #d0d5dd', borderRadius: 6 }}>
+        <table className="est-sheet">
           <thead>
             <tr>
-              <th>№</th>
-              <th>Позиция</th>
-              <th className="text-right">Смета заказчика</th>
-              <th className="text-right">Наш ЛСР</th>
-              <th className="text-right">Разница ₽</th>
-              <th className="text-right">Разница %</th>
-              <th style={{ width: 50 }}></th>
+              <th className="col-cmp-num">№</th>
+              <th className="col-cmp-name">Позиция</th>
+              <th className="col-cmp-sum">Смета заказч.</th>
+              <th className="col-cmp-sum">Наш ЛСР</th>
+              <th className="col-cmp-diff">Разница ₽</th>
+              <th className="col-cmp-pct">Разн. %</th>
+              <th className="col-cmp-act"></th>
             </tr>
           </thead>
           <tbody>
@@ -841,24 +863,28 @@ function CompareTab({
               const diffPct = row.customerSum > 0 ? Math.round((diffRub / row.customerSum) * 100) : 0;
               return (
                 <tr key={`${row.num}-${index}`}>
-                  <td><input className="input" style={compareInputStyle} value={row.num} onChange={(e) => updateRow(index, 'num', e.target.value)} /></td>
-                  <td><input className="input" style={{ ...compareInputStyle, minWidth: 180 }} value={row.name} onChange={(e) => updateRow(index, 'name', e.target.value)} /></td>
-                  <td className="text-right"><input type="number" className="input text-right" style={compareInputStyle} value={row.customerSum || ''} onChange={(e) => updateRow(index, 'customerSum', e.target.value === '' ? 0 : Number(e.target.value))} /></td>
-                  <td className="text-right"><input type="number" className="input text-right" style={compareInputStyle} value={row.ourSum || ''} onChange={(e) => updateRow(index, 'ourSum', e.target.value === '' ? 0 : Number(e.target.value))} /></td>
-                  <td className={`text-right text-bold ${diffRub > 0 ? 'text-success' : diffRub < 0 ? 'text-danger' : ''}`}>{diffRub >= 0 ? '+' : ''}{formatMoney(diffRub)}</td>
-                  <td className={`text-right ${diffPct > 0 ? 'text-success' : diffPct < 0 ? 'text-danger' : ''}`}>{diffPct >= 0 ? '+' : ''}{diffPct}%</td>
-                  <td><button type="button" className="table-action table-action--delete" title="Удалить" onClick={() => deleteRow(index)}>✕</button></td>
+                  <td style={{ textAlign: 'center', padding: '0 4px', fontSize: 12 }}>{row.num}</td>
+                  <td className="col-name-cell"><textarea rows={1} value={row.name} onChange={(e) => updateRow(index, 'name', e.target.value)} onInput={(e) => { const t = e.currentTarget; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }} ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }} /></td>
+                  <td><input type="number" value={row.customerSum || ''} onChange={(e) => updateRow(index, 'customerSum', e.target.value === '' ? 0 : Number(e.target.value))} /></td>
+                  <td><input type="number" value={row.ourSum || ''} onChange={(e) => updateRow(index, 'ourSum', e.target.value === '' ? 0 : Number(e.target.value))} /></td>
+                  <td className={`est-cmp-ro ${diffRub > 0 ? 'text-success' : diffRub < 0 ? 'text-danger' : ''}`}>{diffRub >= 0 ? '+' : ''}{formatMoney(diffRub)}</td>
+                  <td className={`est-cmp-ro ${diffPct > 0 ? 'text-success' : diffPct < 0 ? 'text-danger' : ''}`}>{diffPct >= 0 ? '+' : ''}{diffPct}%</td>
+                  <td className="est-cmp-actions">
+                    <button type="button" title="Вверх" onClick={() => moveRow(index, -1)} disabled={index === 0}>▲</button>
+                    <button type="button" title="Вниз" onClick={() => moveRow(index, 1)} disabled={index === rows.length - 1}>▼</button>
+                    <button type="button" className="del" title="Удалить" onClick={() => deleteRow(index)}>✕</button>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
           <tfoot>
-            <tr style={{ fontWeight: 700 }}>
-              <td colSpan={2}>ИТОГО</td>
-              <td className="text-right">{formatMoney(totalCustomer)}</td>
-              <td className="text-right">{formatMoney(totalOur)}</td>
-              <td className={`text-right ${totalDiff > 0 ? 'text-success' : 'text-danger'}`}>{totalDiff >= 0 ? '+' : ''}{formatMoney(totalDiff)}</td>
-              <td className={`text-right ${totalDiffPct > 0 ? 'text-success' : totalDiffPct < 0 ? 'text-danger' : ''}`}>{totalDiffPct >= 0 ? '+' : ''}{totalDiffPct}%</td>
+            <tr>
+              <td colSpan={2} style={{ textAlign: 'right', paddingRight: 8 }}>ИТОГО</td>
+              <td style={{ textAlign: 'right', padding: '0 6px' }}>{formatMoney(totalCustomer)}</td>
+              <td style={{ textAlign: 'right', padding: '0 6px' }}>{formatMoney(totalOur)}</td>
+              <td style={{ textAlign: 'right', padding: '0 6px', color: totalDiff > 0 ? '#16a34a' : totalDiff < 0 ? '#dc2626' : undefined }}>{totalDiff >= 0 ? '+' : ''}{formatMoney(totalDiff)}</td>
+              <td style={{ textAlign: 'right', padding: '0 6px', color: totalDiffPct > 0 ? '#16a34a' : totalDiffPct < 0 ? '#dc2626' : undefined }}>{totalDiffPct >= 0 ? '+' : ''}{totalDiffPct}%</td>
               <td />
             </tr>
           </tfoot>
