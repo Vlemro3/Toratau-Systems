@@ -108,7 +108,7 @@ export default function App() {
             <Route path="/projects/:projectId/expenses/new" element={<ExpenseFormPage />} />
             <Route path="/projects/:projectId/expenses/:id/edit" element={<ExpenseFormPage />} />
 
-            {/* Контакты подрядчиков (бывш. Бригады) */}
+            {/* Контакты подрядчиков */}
             <Route path="/contacts" element={
               <ProtectedRoute requiredRole="admin"><CrewsPage /></ProtectedRoute>
             } />

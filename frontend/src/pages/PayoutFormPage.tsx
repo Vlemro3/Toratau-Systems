@@ -1,5 +1,5 @@
 /**
- * Форма создания / редактирования выплаты бригаде
+ * Форма создания / редактирования выплаты подрядчику
  */
 import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -91,7 +91,7 @@ export function PayoutFormPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!form.crew_id) { setError('Выберите бригаду'); return; }
+    if (!form.crew_id) { setError('Выберите подрядчика'); return; }
     setError(''); setSaving(true);
     try {
       if (isEdit) {
@@ -120,9 +120,9 @@ export function PayoutFormPage() {
 
       <form onSubmit={handleSubmit} className="form form--wide">
         <div className="form-group">
-          <label>Бригада *</label>
+          <label>Подрядчик *</label>
           <select name="crew_id" value={form.crew_id} onChange={handleChange}>
-            <option value={0} disabled>— Выберите бригаду —</option>
+            <option value={0} disabled>— Выберите подрядчика —</option>
             {crews.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
             <option value="__new__">+ Добавить контакт...</option>
           </select>

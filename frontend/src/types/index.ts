@@ -11,7 +11,7 @@ export type ProjectStatus = 'new' | 'in_progress' | 'paused' | 'completed' | 'ar
 /** Статусы записи о выполненной работе */
 export type WorkLogStatus = 'draft' | 'pending' | 'approved' | 'rejected';
 
-/** Статусы выплаты бригаде */
+/** Статусы выплаты подрядчику */
 export type PayoutStatus = 'created' | 'approved' | 'cancelled';
 
 /** Встроенные категории расходов; допускаются и пользовательские (строка — название) */
@@ -63,7 +63,7 @@ export interface ProjectCreate {
   notes?: string;
 }
 
-/* ---- Бригада / подрядчик ---- */
+/* ---- Подрядчик ---- */
 export interface Crew {
   id: number;
   name: string;
@@ -176,7 +176,7 @@ export interface ExpenseCreate {
   comment?: string;
 }
 
-/* ---- Выплата бригаде ---- */
+/* ---- Выплата подрядчику ---- */
 export interface Payout {
   id: number;
   project_id: number;
@@ -203,7 +203,7 @@ export interface PayoutCreate {
   comment?: string;
 }
 
-/* ---- Сводка по бригаде на объекте ---- */
+/* ---- Сводка по подрядчику на объекте ---- */
 export interface CrewSummary {
   crew: Crew;
   accrued: number;

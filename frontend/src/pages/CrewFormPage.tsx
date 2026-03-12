@@ -1,5 +1,5 @@
 /**
- * Форма создания / редактирования бригады
+ * Форма создания / редактирования подрядчика
  */
 import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -87,8 +87,8 @@ export function CrewFormPage() {
       <form onSubmit={handleSubmit} className="form form--wide">
         <div className="form-row">
           <div className="form-group">
-            <label>Название бригады *</label>
-            <input name="name" value={form.name} onChange={handleChange} required placeholder="Например: Бригада Иванова" />
+            <label>Название подрядчика *</label>
+            <input name="name" value={form.name} onChange={handleChange} required placeholder="Например: ООО «Строитель» или ИП Иванов" />
           </div>
           <div className="form-group">
             <label>Контактное лицо</label>
@@ -114,7 +114,7 @@ export function CrewFormPage() {
               checked={form.is_active}
               onChange={handleChange}
             />
-            Активна
+            Активен
           </label>
         </div>
 

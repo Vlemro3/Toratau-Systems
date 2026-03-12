@@ -133,7 +133,7 @@ export function WorkLogFormPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!form.crew_id || !form.work_type_id) { setError('Выберите бригаду и вид работ'); return; }
+    if (!form.crew_id || !form.work_type_id) { setError('Выберите подрядчика и вид работ'); return; }
     if (form.accrued_amount == null || form.accrued_amount < 0) { setError('Укажите сумму'); return; }
     setError(''); setSaving(true);
     try {
@@ -175,9 +175,9 @@ export function WorkLogFormPage() {
         </div>
 
         <div className="form-group">
-          <label>Бригада *</label>
+          <label>Подрядчик *</label>
           <select name="crew_id" value={form.crew_id} onChange={handleChange}>
-            <option value={0} disabled>— Выберите бригаду —</option>
+            <option value={0} disabled>— Выберите подрядчика —</option>
             {crews.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
             <option value="__new__">+ Добавить контакт...</option>
           </select>

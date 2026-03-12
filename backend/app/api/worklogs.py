@@ -111,7 +111,7 @@ def create_work_log(
         models.Crew.portal_id == current_user.portal_id,
     ).first()
     if not crew:
-        raise HTTPException(status_code=404, detail="Бригада не найдена")
+        raise HTTPException(status_code=404, detail="Подрядчик не найден")
     rate_snapshot = work_type.rate or Decimal(0)
     accrued = Decimal(str(data.accrued_amount)) if data.accrued_amount is not None else (Decimal(str(data.volume)) * rate_snapshot)
     wl = models.WorkLog(

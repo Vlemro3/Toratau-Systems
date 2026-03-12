@@ -64,8 +64,8 @@ const DEMO_PROJECTS: Project[] = [
 ];
 
 const DEMO_CREWS: Crew[] = [
-  { id: 1, name: 'Бригада Иванова', contact: 'Иванов С.П.', phone: '+7 900 111-22-33', notes: 'Общестроительные работы', is_active: true },
-  { id: 2, name: 'Бригада Петрова', contact: 'Петров А.В.', phone: '+7 900 444-55-66', notes: 'Отделочные работы', is_active: true },
+  { id: 1, name: 'Подрядчик Иванов', contact: 'Иванов С.П.', phone: '+7 900 111-22-33', notes: 'Общестроительные работы', is_active: true },
+  { id: 2, name: 'Подрядчик Петров', contact: 'Петров А.В.', phone: '+7 900 444-55-66', notes: 'Отделочные работы', is_active: true },
   { id: 3, name: 'Электрики Сидорова', contact: 'Сидоров И.К.', phone: '+7 900 777-88-99', notes: 'Электромонтаж', is_active: true },
 ];
 
@@ -547,7 +547,7 @@ class MockStore {
   getCrews(): Crew[] { return [...this.db.crews]; }
   getCrew(id: number): Crew {
     const c = this.db.crews.find((x) => x.id === id);
-    if (!c) throw new Error('Бригада не найдена');
+    if (!c) throw new Error('Подрядчик не найден');
     return { ...c };
   }
   createCrew(data: CrewCreate): Crew {
@@ -562,7 +562,7 @@ class MockStore {
   }
   updateCrew(id: number, data: Partial<CrewCreate>): Crew {
     const idx = this.db.crews.findIndex((x) => x.id === id);
-    if (idx === -1) throw new Error('Бригада не найдена');
+    if (idx === -1) throw new Error('Подрядчик не найден');
     Object.assign(this.db.crews[idx], data);
     this.save();
     return { ...this.db.crews[idx] };
@@ -1472,16 +1472,16 @@ class MockStore {
     const totalAccrued = workLogs.reduce((s, x) => s + x.accrued_amount, 0);
     const totalPaid = payouts.reduce((s, x) => s + x.amount, 0);
 
-    /* Итого факт расход = прочие расходы + выплачено бригадам */
+    /* Итого факт расход = прочие расходы + выплачено подрядчикам */
     const totalFactExpense = totalExpenses + totalPaid;
     /* Баланс (касса) = пришло денег − итого факт расход */
     const balance = totalCashIn - totalFactExpense;
-    /* Прогноз прибыли = контракт − (прочие расходы + начислено бригадам) */
+    /* Прогноз прибыли = контракт − (прочие расходы + начислено подрядчикам) */
     const forecastProfit = project.contract_amount - (totalExpenses + totalAccrued);
     /* Отклонение от плана = факт. себестоимость − плановая (отриц. = уложились в план) */
     const planDeviation = (totalExpenses + totalAccrued) - project.planned_cost;
 
-    /* Сводка по бригадам */
+    /* Сводка по подрядчикам */
     const crewMap = new Map<number, { accrued: number; paid: number }>();
     for (const wl of workLogs) {
       const entry = crewMap.get(wl.crew_id) || { accrued: 0, paid: 0 };

@@ -38,7 +38,7 @@ def get_crew(
         models.Crew.portal_id == current_user.portal_id,
     ).first()
     if not crew:
-        raise HTTPException(status_code=404, detail="Бригада не найдена")
+        raise HTTPException(status_code=404, detail="Подрядчик не найден")
     return CrewResponse(
         id=crew.id,
         name=crew.name,
@@ -91,7 +91,7 @@ def update_crew(
         models.Crew.portal_id == current_user.portal_id,
     ).first()
     if not crew:
-        raise HTTPException(status_code=404, detail="Бригада не найдена")
+        raise HTTPException(status_code=404, detail="Подрядчик не найден")
     if data.name is not None:
         crew.name = data.name
     if data.contact is not None:
@@ -126,7 +126,7 @@ def delete_crew(
         models.Crew.portal_id == current_user.portal_id,
     ).first()
     if not crew:
-        raise HTTPException(status_code=404, detail="Бригада не найдена")
+        raise HTTPException(status_code=404, detail="Подрядчик не найден")
     db.delete(crew)
     log_audit(db, "DELETE", "crew", str(crew_id), current_user.portal_id, current_user.id, None)
     db.commit()

@@ -98,7 +98,7 @@ def create_payout(
         models.Crew.portal_id == current_user.portal_id,
     ).first()
     if not crew:
-        raise HTTPException(status_code=404, detail="Бригада не найдена")
+        raise HTTPException(status_code=404, detail="Подрядчик не найден")
     p = models.Payout(
         project_id=data.project_id,
         crew_id=data.crew_id,

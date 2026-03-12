@@ -1,5 +1,5 @@
 /**
- * API бригад
+ * API подрядчиков
  */
 import { api } from './client';
 import type { Crew, CrewCreate } from '../types';

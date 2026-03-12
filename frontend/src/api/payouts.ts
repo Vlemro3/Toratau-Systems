@@ -1,5 +1,5 @@
 /**
- * API выплат бригадам
+ * API выплат подрядчикам
  */
 import { api } from './client';
 import type { Payout, PayoutCreate } from '../types';

@@ -205,12 +205,12 @@ function SummaryDashboard({ project, report, workLogs, cashIns, expenses, payout
     return Math.ceil((now.getTime() - new Date(project.start_date).getTime()) / MS_PER_DAY);
   }, [project.start_date, now]);
 
-  /* Аналитика для Прораба: выплаты по бригадам, расходы, объём по видам работ */
+  /* Аналитика для Прораба: выплаты по подрядчикам, расходы, объём по видам работ */
   const payoutsByCrew = useMemo(() => {
     const byCrew: Record<number, { name: string; total: number }> = {};
     payouts.forEach((p) => {
       const id = p.crew_id;
-      if (!byCrew[id]) byCrew[id] = { name: p.crew?.name || `Бригада #${id}`, total: 0 };
+      if (!byCrew[id]) byCrew[id] = { name: p.crew?.name || `Подрядчик #${id}`, total: 0 };
       byCrew[id].total += p.amount;
     });
     return Object.entries(byCrew).map(([id, v]) => ({ crewId: Number(id), name: v.name, total: v.total }));
@@ -279,7 +279,7 @@ function SummaryDashboard({ project, report, workLogs, cashIns, expenses, payout
         {summaryQuickActions}
         <div className="dash-cols">
           <div className="dash-card">
-            <h3 className="dash-card__title">Выплаты бригадам</h3>
+            <h3 className="dash-card__title">Выплаты подрядчикам</h3>
             {payoutsByCrew.length === 0 ? (
               <p className="text-muted" style={{ padding: '12px 0' }}>Нет выплат</p>
             ) : (
@@ -386,7 +386,7 @@ function SummaryDashboard({ project, report, workLogs, cashIns, expenses, payout
           <ProgressBar label="Освоение бюджета" pct={budgetUsed} sub={`${formatMoney(report.total_fact_expense)} из ${formatMoney(project.planned_cost)}`} color={budgetUsed > 100 ? 'red' : budgetUsed > 80 ? 'yellow' : 'blue'} />
           <h3 className="dash-card__title" style={{ marginTop: 20 }}>Структура расходов</h3>
           <div className="dash-bar-chart">
-            <BarRow label="Бригады" value={formatMoney(report.total_paid)} pct={crewShare} color="#2563eb" />
+            <BarRow label="Подрядчики" value={formatMoney(report.total_paid)} pct={crewShare} color="#2563eb" />
             <BarRow label="Прочие" value={formatMoney(report.total_expenses)} pct={otherShare} color="#f59e0b" />
           </div>
         </div>
@@ -483,8 +483,8 @@ function FinanceRows({ project, report }: { project: Project; report: ProjectRep
     { d: true },
     { label: 'Пришло денег', value: formatMoney(report.total_cash_in), cls: 'text-success' },
     { label: 'Расходы (прочие)', value: formatMoney(report.total_expenses), cls: 'text-danger' },
-    { label: 'Начислено бригадам', value: formatMoney(report.total_accrued) },
-    { label: 'Выплачено бригадам', value: formatMoney(report.total_paid) },
+    { label: 'Начислено подрядчикам', value: formatMoney(report.total_accrued) },
+    { label: 'Выплачено подрядчикам', value: formatMoney(report.total_paid) },
     { d: true },
     { label: 'Итого факт расход', value: formatMoney(report.total_fact_expense), cls: 'text-danger', bold: true },
     { label: 'Баланс (касса)', value: formatMoney(report.balance), cls: report.balance >= 0 ? 'text-success' : 'text-danger', bold: true },
@@ -510,7 +510,7 @@ function WorksSection({ projectId, workLogs, isAdmin, onDelete, onDeleteMany }: 
         columns={[
           { key: 'date', label: 'Дата', sortValue: (wl) => wl.date },
           { key: 'type', label: 'Вид работ', sortValue: (wl) => wl.work_type?.name || '' },
-          { key: 'crew', label: 'Бригада', sortValue: (wl) => wl.crew?.name || '' },
+          { key: 'crew', label: 'Подрядчик', sortValue: (wl) => wl.crew?.name || '' },
           { key: 'volume', label: 'Объём', className: 'text-right', sortValue: (wl) => wl.volume },
           { key: 'amount', label: 'Сумма', className: 'text-right', sortValue: (wl) => wl.accrued_amount },
           { key: 'comment', label: 'Комментарий' },
@@ -641,7 +641,7 @@ function ExpensesAndPayoutsSection({ projectId, expenses, payouts, isAdmin, onDe
           items={payouts}
           columns={[
             { key: 'date', label: 'Дата', sortValue: (p) => p.date },
-            { key: 'crew', label: 'Бригада', sortValue: (p) => p.crew?.name || '' },
+            { key: 'crew', label: 'Подрядчик', sortValue: (p) => p.crew?.name || '' },
             { key: 'amount', label: 'Сумма', className: 'text-right', sortValue: (p) => p.amount },
             { key: 'method', label: 'Способ', sortValue: (p) => p.payment_method },
             { key: 'comment', label: 'Комментарий' },
@@ -675,17 +675,17 @@ function ExpensesAndPayoutsSection({ projectId, expenses, payouts, isAdmin, onDe
   );
 }
 
-/** Строка сводки по бригаде с id для DataTable */
+/** Строка сводки по подрядчику с id для DataTable */
 type CrewSummaryRow = ProjectReport['crews_summary'][number] & { id: number };
 
 function CrewsTable({ report }: { report: ProjectReport }) {
   const rows: CrewSummaryRow[] = (report.crews_summary || []).map((cs) => ({ ...cs, id: cs.crew.id }));
-  if (rows.length === 0) return <EmptyState message="Нет данных по бригадам" icon="👷" />;
+  if (rows.length === 0) return <EmptyState message="Нет данных по подрядчикам" icon="👷" />;
   return (
     <DataTable<CrewSummaryRow>
       items={rows}
       columns={[
-        { key: 'name', label: 'Бригада', sortValue: (r) => r.crew.name },
+        { key: 'name', label: 'Подрядчик', sortValue: (r) => r.crew.name },
         { key: 'accrued', label: 'Начислено', className: 'text-right', sortValue: (r) => r.accrued },
         { key: 'paid', label: 'Выплачено', className: 'text-right', sortValue: (r) => r.paid },
         { key: 'debt', label: 'Долг', className: 'text-right', sortValue: (r) => r.debt },
@@ -693,7 +693,7 @@ function CrewsTable({ report }: { report: ProjectReport }) {
       defaultSortKey="name"
       defaultSortDir="asc"
       searchFields={(r) => `${r.crew.name} ${formatMoney(r.accrued)} ${formatMoney(r.paid)} ${formatMoney(r.debt)}`}
-      emptyMessage="Нет данных по бригадам"
+      emptyMessage="Нет данных по подрядчикам"
       emptyIcon="👷"
       showCheckboxes={false}
       renderRow={(r) => (
